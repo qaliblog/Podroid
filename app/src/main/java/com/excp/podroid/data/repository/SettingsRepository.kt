@@ -53,6 +53,8 @@ class SettingsRepository @Inject constructor(
         val KEY_AVF_HINT_DISMISSED      = booleanPreferencesKey("avf_hint_dismissed")
         val KEY_AVF_VERBOSE_LOGGING     = booleanPreferencesKey("avf_verbose_logging")
         val KEY_USB_PASSTHROUGH_ENABLED = booleanPreferencesKey("usb_passthrough_enabled")
+        val KEY_ISO_URI                 = stringPreferencesKey("iso_uri")
+        val KEY_ISO_ARCH                = stringPreferencesKey("iso_arch")
 
         val KEY_X11_RES_MODE        = stringPreferencesKey("x11_resolution_mode")
         val KEY_X11_RES_PRESET      = stringPreferencesKey("x11_resolution_preset")
@@ -130,6 +132,8 @@ class SettingsRepository @Inject constructor(
     }
     val avfHintDismissed     = pref(KEY_AVF_HINT_DISMISSED, false)
     val usbPassthroughEnabled = pref(KEY_USB_PASSTHROUGH_ENABLED, false)
+    val isoUri               = pref(KEY_ISO_URI, "")
+    val isoArch              = pref(KEY_ISO_ARCH, "aarch64")
     val avfVerboseLogging: Flow<Boolean> = context.dataStore.data
         .catch { e -> if (e is IOException) emit(androidx.datastore.preferences.core.emptyPreferences()) else throw e }
         .map { prefs -> prefs[KEY_AVF_VERBOSE_LOGGING] ?: false }
@@ -161,6 +165,8 @@ class SettingsRepository @Inject constructor(
     suspend fun setAvfHintDismissed(value: Boolean)      = set(KEY_AVF_HINT_DISMISSED, value)
     suspend fun setAvfVerboseLogging(value: Boolean)     = set(KEY_AVF_VERBOSE_LOGGING, value)
     suspend fun setUsbPassthroughEnabled(value: Boolean) = set(KEY_USB_PASSTHROUGH_ENABLED, value)
+    suspend fun setIsoUri(value: String)                 = set(KEY_ISO_URI, value)
+    suspend fun setIsoArch(value: String)                = set(KEY_ISO_ARCH, value)
 
     val x11Settings: kotlinx.coroutines.flow.Flow<com.excp.podroid.x11.X11Settings> = context.dataStore.data
         .catch { e -> if (e is IOException) emit(androidx.datastore.preferences.core.emptyPreferences()) else throw e }
@@ -209,4 +215,6 @@ class SettingsRepository @Inject constructor(
     suspend fun getEngineSelectionSnapshot()      = engineSelection.first()
     suspend fun getAvfVerboseLoggingSnapshot()    = avfVerboseLogging.first()
     suspend fun getUsbPassthroughEnabledSnapshot() = usbPassthroughEnabled.first()
+    suspend fun getIsoUriSnapshot()               = isoUri.first()
+    suspend fun getIsoArchSnapshot()              = isoArch.first()
 }

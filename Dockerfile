@@ -310,7 +310,7 @@ RUN sed -i '1i#include "/opt/qemu_jmp.h"' ${QEMU_DIR}/util/coroutine-ucontext.c 
 RUN sed -i 's@^    rc = libusb_init(&ctx);@#if defined(__ANDROID__)\n    libusb_set_option(NULL, LIBUSB_OPTION_NO_DEVICE_DISCOVERY); /* unprivileged Android: wrap passed fd only, skip enumeration */\n#endif\n    rc = libusb_init(\&ctx);@' ${QEMU_DIR}/hw/usb/host-libusb.c \
     && grep -q LIBUSB_OPTION_NO_DEVICE_DISCOVERY ${QEMU_DIR}/hw/usb/host-libusb.c
 
-RUN cd ${QEMU_DIR} && ./configure --cc="${CC}" --cross-prefix="${LLVM}/bin/llvm-" --extra-cflags="-fPIC -DANDROID -include /opt/shm_shim.h -I${PREFIX}/include -I${PREFIX}/include/glib-2.0 -I${PREFIX}/lib/glib-2.0/include" --extra-ldflags="-L${PREFIX}/lib -Wl,-z,max-page-size=16384 ${PREFIX}/lib/libucontext.a ${PREFIX}/lib/libshm.a ${PREFIX}/lib/libqemujmp.a" --prefix=/opt/qemu-out --target-list=aarch64-softmmu --enable-tcg --enable-slirp --enable-virtfs --enable-libusb --enable-pie --disable-docs --disable-gtk --disable-sdl --disable-vnc --disable-vhost-user --disable-plugins --with-coroutine=ucontext && make -j$(nproc) install
+RUN cd ${QEMU_DIR} && ./configure --cc="${CC}" --cross-prefix="${LLVM}/bin/llvm-" --extra-cflags="-fPIC -DANDROID -include /opt/shm_shim.h -I${PREFIX}/include -I${PREFIX}/include/glib-2.0 -I${PREFIX}/lib/glib-2.0/include" --extra-ldflags="-L${PREFIX}/lib -Wl,-z,max-page-size=16384 ${PREFIX}/lib/libucontext.a ${PREFIX}/lib/libshm.a ${PREFIX}/lib/libqemujmp.a" --prefix=/opt/qemu-out --target-list=aarch64-softmmu,x86_64-softmmu --enable-tcg --enable-slirp --enable-virtfs --enable-libusb --enable-pie --disable-docs --disable-gtk --disable-sdl --disable-vnc --disable-vhost-user --disable-plugins --with-coroutine=ucontext && make -j$(nproc) install
 
 # Bridge
 COPY podroid-bridge.c /tmp/podroid-bridge.c
@@ -322,9 +322,11 @@ RUN ${CC} --sysroot=${LLVM}/sysroot -target aarch64-linux-android28 -fPIE -pie -
 
 # Soname fix
 RUN cp /opt/qemu-out/bin/qemu-system-aarch64 /opt/qemu-out/libqemu-system-aarch64.so \
+    && cp /opt/qemu-out/bin/qemu-system-x86_64 /opt/qemu-out/libqemu-system-x86_64.so \
     && cp /opt/qemu-out/lib/libslirp.so.0 /opt/qemu-out/libslirp.so \
     && patchelf --set-soname libslirp.so /opt/qemu-out/libslirp.so \
-    && patchelf --replace-needed libslirp.so.0 libslirp.so /opt/qemu-out/libqemu-system-aarch64.so
+    && patchelf --replace-needed libslirp.so.0 libslirp.so /opt/qemu-out/libqemu-system-aarch64.so \
+    && patchelf --replace-needed libslirp.so.0 libslirp.so /opt/qemu-out/libqemu-system-x86_64.so
 
 # ==============================================================================
 # SECTION 3: Final Artifacts Stage
@@ -336,6 +338,7 @@ COPY --from=packer /output/vmlinuz-virt /vmlinuz-virt
 COPY --from=packer /output/initrd.img /initrd.img
 # QEMU
 COPY --from=qemu-builder /opt/qemu-out/libqemu-system-aarch64.so /libqemu-system-aarch64.so
+COPY --from=qemu-builder /opt/qemu-out/libqemu-system-x86_64.so /libqemu-system-x86_64.so
 COPY --from=qemu-builder /opt/qemu-out/libslirp.so /libslirp.so
 COPY --from=qemu-builder /opt/qemu-out/libpodroid-bridge.so /libpodroid-bridge.so
 COPY --from=qemu-builder /opt/qemu-out/libpodroid-launcher.so /libpodroid-launcher.so

@@ -91,4 +91,6 @@ data class VmConfig(
     val verboseLogging: Boolean = false,
     val x11Dpi: Int = 96,
     val usbPassthroughEnabled: Boolean = false,
+    val isoUri: String? = null,
+    val isoArch: String = "aarch64",
 )

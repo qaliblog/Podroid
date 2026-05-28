@@ -146,6 +146,7 @@ build_qemu() {
     
     mkdir -p "$JNILIBS" "$ASSETS/qemu/keymaps"
     docker cp podroid-qemu-extract:/libqemu-system-aarch64.so "$JNILIBS/"
+    docker cp podroid-qemu-extract:/libqemu-system-x86_64.so  "$JNILIBS/"
     docker cp podroid-qemu-extract:/libslirp.so               "$JNILIBS/"
     docker cp podroid-qemu-extract:/libpodroid-bridge.so      "$JNILIBS/"
     docker cp podroid-qemu-extract:/libpodroid-launcher.so    "$JNILIBS/"
@@ -154,6 +155,7 @@ build_qemu() {
     docker rm podroid-qemu-extract >/dev/null
     
     verify_16kb_align "$JNILIBS/libqemu-system-aarch64.so"
+    verify_16kb_align "$JNILIBS/libqemu-system-x86_64.so"
     success "QEMU and bridge ready."
 }
 

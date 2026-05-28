@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
 import androidx.compose.animation.core.animateDpAsState
 import androidx.core.content.ContextCompat
@@ -85,9 +86,11 @@ fun SetupScreen(
     var sshEnabled by rememberSaveable { mutableStateOf(true) }
     var storageAccessEnabled by rememberSaveable { mutableStateOf(false) }
     var usbPassthroughEnabled by rememberSaveable { mutableStateOf(false) }
+    var isoUri by rememberSaveable { mutableStateOf("") }
+    var isoArch by rememberSaveable { mutableStateOf("aarch64") }
     val usbPassthroughAvailable = remember { viewModel.usbPassthroughAvailable() }
     val setupComplete by viewModel.setupComplete.collectAsStateWithLifecycle()
-    val pagerState = rememberPagerState(pageCount = { 4 })
+    val pagerState = rememberPagerState(pageCount = { 5 })
     val scope = rememberCoroutineScope()
 
     // Request the notification permission BEFORE navigating away; using
@@ -135,7 +138,7 @@ fun SetupScreen(
         ) {
             // Step progress bar
             LinearProgressIndicator(
-                progress = { (pagerState.currentPage + 1) / 4f },
+                progress = { (pagerState.currentPage + 1) / 5f },
                 modifier = Modifier.fillMaxWidth(),
                 trackColor = MaterialTheme.colorScheme.surfaceVariant,
             )
@@ -153,14 +156,23 @@ fun SetupScreen(
                         onSelect = { selectedGb = it },
                         onNext = { scope.launch { pagerState.animateScrollToPage(1) } },
                     )
-                    1 -> VmConfigPage(
+                    1 -> IsoSelectionPage(
                         windowSizeClass = windowSizeClass,
-                        sshEnabled = sshEnabled,
-                        onSshToggle = { sshEnabled = it },
+                        selectedUri = isoUri,
+                        selectedArch = isoArch,
+                        onUriSelected = { isoUri = it },
+                        onArchSelected = { isoArch = it },
                         onBack = { scope.launch { pagerState.animateScrollToPage(0) } },
                         onNext = { scope.launch { pagerState.animateScrollToPage(2) } },
                     )
-                    2 -> StorageAccessPage(
+                    2 -> VmConfigPage(
+                        windowSizeClass = windowSizeClass,
+                        sshEnabled = sshEnabled,
+                        onSshToggle = { sshEnabled = it },
+                        onBack = { scope.launch { pagerState.animateScrollToPage(1) } },
+                        onNext = { scope.launch { pagerState.animateScrollToPage(3) } },
+                    )
+                    3 -> StorageAccessPage(
                         windowSizeClass = windowSizeClass,
                         storageAccessEnabled = storageAccessEnabled,
                         onStorageAccessToggle = { enabled ->
@@ -187,21 +199,23 @@ fun SetupScreen(
                                 )
                             }
                         },
-                        onBack = { scope.launch { pagerState.animateScrollToPage(1) } },
-                        onNext = { scope.launch { pagerState.animateScrollToPage(3) } },
+                        onBack = { scope.launch { pagerState.animateScrollToPage(2) } },
+                        onNext = { scope.launch { pagerState.animateScrollToPage(4) } },
                     )
-                    3 -> UsbPassthroughPage(
+                    4 -> UsbPassthroughPage(
                         windowSizeClass = windowSizeClass,
                         usbPassthroughEnabled = usbPassthroughEnabled,
                         available = usbPassthroughAvailable,
                         onUsbPassthroughToggle = { usbPassthroughEnabled = it },
-                        onBack = { scope.launch { pagerState.animateScrollToPage(2) } },
+                        onBack = { scope.launch { pagerState.animateScrollToPage(3) } },
                         onGetStarted = {
                             viewModel.completeSetup(
                                 storageSizeGb = selectedGb,
                                 sshEnabled = sshEnabled,
                                 storageAccessEnabled = storageAccessEnabled,
                                 usbPassthroughEnabled = usbPassthroughEnabled && usbPassthroughAvailable,
+                                isoUri = isoUri,
+                                isoArch = isoArch,
                             )
                         },
                     )
@@ -216,7 +230,7 @@ fun SetupScreen(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                repeat(4) { index ->
+                repeat(5) { index ->
                     val isSelected = pagerState.currentPage == index
                     val dotWidth by animateDpAsState(
                         targetValue = if (isSelected) 24.dp else 8.dp,
@@ -337,7 +351,7 @@ private fun StoragePage(
 ) {
     SetupPageLayout(
         windowSizeClass = windowSizeClass,
-        stepLabel  = stringResource(R.string.step_1_of_4),
+        stepLabel  = stringResource(R.string.step_1_of_5),
         title      = stringResource(R.string.persistent_storage),
         description = stringResource(R.string.storage_description),
         bottomBar  = { SetupNextBar(onNext = onNext) },
@@ -352,7 +366,75 @@ private fun StoragePage(
     }
 }
 
-// ── Page 2: VM config + SSH ───────────────────────────────────────────────────
+// ── Page 2: ISO Selection ─────────────────────────────────────────────────────
+
+@Composable
+private fun IsoSelectionPage(
+    windowSizeClass: WindowSizeClass,
+    selectedUri: String,
+    selectedArch: String,
+    onUriSelected: (String) -> Unit,
+    onArchSelected: (String) -> Unit,
+    onBack: () -> Unit,
+    onNext: () -> Unit,
+) {
+    val context = LocalContext.current
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+        onResult = { uri ->
+            uri?.let {
+                context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                onUriSelected(it.toString())
+            }
+        }
+    )
+
+    SetupPageLayout(
+        windowSizeClass = windowSizeClass,
+        stepLabel = stringResource(R.string.step_2_of_5),
+        title = stringResource(R.string.iso_selection_title),
+        description = stringResource(R.string.iso_selection_description),
+        bottomBar = {
+            SetupNavBar(
+                onBack = onBack,
+                onNext = onNext,
+                nextLabel = stringResource(R.string.continue_label)
+            )
+        }
+    ) {
+        PodroidSectionLabel(stringResource(R.string.pick_iso_label))
+        PodroidPrimaryButton(
+            text = if (selectedUri.isEmpty()) stringResource(R.string.pick_iso_label) else selectedUri.substringAfterLast("/"),
+            onClick = { launcher.launch(arrayOf("application/x-iso9660-image", "application/octet-stream")) }
+        )
+        if (selectedUri.isEmpty()) {
+            Text(
+                text = stringResource(R.string.no_iso_selected),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Spacer(Modifier.height(PodroidTokens.Spacing.LG))
+        PodroidSectionLabel(stringResource(R.string.iso_arch_label))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = selectedArch == "aarch64",
+                onClick = { onArchSelected("aarch64") },
+                label = { Text(stringResource(R.string.aarch64)) },
+                colors = PodroidChipColors()
+            )
+            FilterChip(
+                selected = selectedArch == "x86_64",
+                onClick = { onArchSelected("x86_64") },
+                label = { Text(stringResource(R.string.x86_64)) },
+                colors = PodroidChipColors()
+            )
+        }
+    }
+}
+
+// ── Page 3: VM config + SSH ───────────────────────────────────────────────────
 
 @Composable
 private fun VmConfigPage(
@@ -364,7 +446,7 @@ private fun VmConfigPage(
 ) {
     SetupPageLayout(
         windowSizeClass = windowSizeClass,
-        stepLabel  = stringResource(R.string.step_2_of_4),
+        stepLabel  = stringResource(R.string.step_3_of_5),
         title      = stringResource(R.string.configure_vm),
         description = stringResource(R.string.vm_config_description),
         bottomBar  = { SetupNavBar(onBack = onBack, onNext = onNext, nextLabel = stringResource(R.string.continue_label)) },
@@ -391,7 +473,7 @@ private fun VmConfigPage(
     }
 }
 
-// ── Page 3: Storage access ────────────────────────────────────────────────────
+// ── Page 4: Storage access ────────────────────────────────────────────────────
 
 @Composable
 private fun StorageAccessPage(
@@ -407,7 +489,7 @@ private fun StorageAccessPage(
 
     SetupPageLayout(
         windowSizeClass = windowSizeClass,
-        stepLabel  = stringResource(R.string.step_3_of_4),
+        stepLabel  = stringResource(R.string.step_4_of_5),
         title      = stringResource(R.string.downloads_sharing),
         description = stringResource(R.string.storage_access_description),
         bottomBar  = { SetupNavBar(onBack = onBack, onNext = onNext, nextLabel = stringResource(R.string.continue_label)) },
@@ -438,7 +520,7 @@ private fun StorageAccessPage(
     }
 }
 
-// ── Page 4: USB passthrough ───────────────────────────────────────────────────
+// ── Page 5: USB passthrough ───────────────────────────────────────────────────
 
 @Composable
 private fun UsbPassthroughPage(
@@ -451,7 +533,7 @@ private fun UsbPassthroughPage(
 ) {
     SetupPageLayout(
         windowSizeClass = windowSizeClass,
-        stepLabel  = stringResource(R.string.step_4_of_4),
+        stepLabel  = stringResource(R.string.step_5_of_5),
         title      = stringResource(R.string.usb_passthrough),
         description = stringResource(R.string.usb_passthrough_description),
         bottomBar  = { SetupNavBar(onBack = onBack, onNext = onGetStarted, nextLabel = stringResource(R.string.get_started)) },
