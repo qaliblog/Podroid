@@ -115,10 +115,20 @@
     <string name="avf_grant_commands">adb shell pm grant com.excp.podroid \\\n  android.permission.MANAGE_VIRTUAL_MACHINE\nadb shell pm grant com.excp.podroid \\\n  android.permission.USE_CUSTOM_VIRTUAL_MACHINE</string>
 
     <!-- Setup Steps -->
-    <string name="step_1_of_4">Step 1 of 4</string>
-    <string name="step_2_of_4">Step 2 of 4</string>
-    <string name="step_3_of_4">Step 3 of 4</string>
-    <string name="step_4_of_4">Step 4 of 4</string>
+    <string name="step_1_of_5">Step 1 of 5</string>
+    <string name="step_2_of_5">Step 2 of 5</string>
+    <string name="step_3_of_5">Step 3 of 5</string>
+    <string name="step_4_of_5">Step 4 of 5</string>
+    <string name="step_5_of_5">Step 5 of 5</string>
+
+    <!-- ISO Selection -->
+    <string name="iso_selection_title">Custom ISO (Optional)</string>
+    <string name="iso_selection_description">Pick an ISO file to boot a different OS. If unselected, Podroid boots its built-in Alpine Linux.</string>
+    <string name="pick_iso_label">Pick ISO file</string>
+    <string name="no_iso_selected">No ISO selected</string>
+    <string name="iso_arch_label">Guest Architecture</string>
+    <string name="aarch64">aarch64</string>
+    <string name="x86_64">x86_64</string>
 
     <!-- Dialogs -->
     <string name="update_available">Update available</string>

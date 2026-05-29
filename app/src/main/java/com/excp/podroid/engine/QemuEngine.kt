@@ -26,6 +26,7 @@ package com.excp.podroid.engine
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import com.excp.podroid.data.repository.PortForwardRule
 import com.excp.podroid.util.LogProxy
@@ -239,6 +240,7 @@ class QemuEngine @Inject constructor(
         return sess
     }
 
+    @SuppressLint("Recycle") // fd passed to QEMU via /dev/fd/N, not leaked
     override suspend fun start(portForwards: List<PortForwardRule>, config: VmConfig) {
         // Atomically check the re-entrancy guard AND claim Starting before any
         // I/O, so two concurrent ACTION_STARTs can't both pass the guard and
@@ -253,7 +255,7 @@ class QemuEngine @Inject constructor(
             _state.value = VmState.Starting
         }
 
-        val qemuExe = qemuExecutable() ?: run {
+        val qemuExe = qemuExecutable(config) ?: run {
             // The startMutex block already set cleanedUp=false and bootStartTime;
             // restore the "cleanedUp=false ⟺ a VM lifetime is in progress"
             // invariant on this early-error return, matching the other error
@@ -488,38 +490,62 @@ class QemuEngine @Inject constructor(
         val args = mutableListOf<String>()
         val userQemuExtras = config.qemuExtraArgs.trim()
         val userKernelExtras = config.kernelExtraCmdline.trim()
+        val isX86 = config.isoArch == "x86_64"
+        val isIso = !config.isoUri.isNullOrEmpty()
 
-        args += "-M"; args += "virt,gic-version=3"
-        // pauth-impdef swaps QEMU's slow QARMA5 PAuth for a fast non-crypto impl (≤50% TCG win on aarch64-on-aarch64).
-        args += "-cpu"; args += "max,pauth-impdef=on"
+        if (isX86) {
+            args += "-M"; args += "q35"
+            args += "-cpu"; args += "max"
+        } else {
+            args += "-M"; args += "virt,gic-version=3"
+            // pauth-impdef swaps QEMU's slow QARMA5 PAuth for a fast non-crypto impl (≤50% TCG win on aarch64-on-aarch64).
+            args += "-cpu"; args += "max,pauth-impdef=on"
+        }
+
         val tbSizeMb = if (config.ramMb >= 2048) 512 else 256
         // thread=multi: one host thread per vCPU; larger tb-size reduces re-translation for JIT-heavy guests.
         args += "-accel"; args += "tcg,thread=multi,tb-size=$tbSizeMb"
         args += "-smp"; args += "${config.cpus}"
         args += "-m";   args += "${config.ramMb}"
 
-        val kernelPath = File(context.filesDir, "vmlinuz-virt")
-        val initrdPath = File(context.filesDir, "initrd.img")
+        // Only use default kernel/initrd if we are NOT booting from an ISO
+        // or if we are aarch64 (custom kernel is aarch64 only).
+        if (!isIso && !isX86) {
+            val kernelPath = File(context.filesDir, "vmlinuz-virt")
+            val initrdPath = File(context.filesDir, "initrd.img")
 
-        if (kernelPath.exists()) {
-            args += "-kernel"; args += kernelPath.absolutePath
-            val cmdline = buildString {
-                // mitigations=off: speculative-exec attacks don't cross the TCG ISA boundary; 5–15% gain.
-                append("console=ttyAMA0 mitigations=off")
-                if (userKernelExtras.isNotEmpty()) append(" ").append(userKernelExtras)
-                append(" androidip=").append(config.androidIp)
-                if (config.sshEnabled) append(" ssh=1")
-                append(" podroid.x11.dpi=").append(config.x11Dpi)
+            if (kernelPath.exists()) {
+                args += "-kernel"; args += kernelPath.absolutePath
+                val cmdline = buildString {
+                    // mitigations=off: speculative-exec attacks don't cross the TCG ISA boundary; 5–15% gain.
+                    append("console=ttyAMA0 mitigations=off")
+                    if (userKernelExtras.isNotEmpty()) append(" ").append(userKernelExtras)
+                    append(" androidip=").append(config.androidIp)
+                    if (config.sshEnabled) append(" ssh=1")
+                    append(" podroid.x11.dpi=").append(config.x11Dpi)
+                }
+                args += "-append"; args += cmdline
+            } else {
+                Log.w(TAG, "Kernel not found!")
             }
-            args += "-append"; args += cmdline
-        } else {
-            Log.w(TAG, "Kernel not found!")
+
+            if (initrdPath.exists()) {
+                args += "-initrd"; args += initrdPath.absolutePath
+            } else {
+                Log.w(TAG, "Initrd not found!")
+            }
         }
 
-        if (initrdPath.exists()) {
-            args += "-initrd"; args += initrdPath.absolutePath
-        } else {
-            Log.w(TAG, "Initrd not found!")
+        if (isIso && config.isoUri != null) {
+            try {
+                val uri = Uri.parse(config.isoUri)
+                val pfd = context.contentResolver.openFileDescriptor(uri, "r")
+                if (pfd != null) {
+                    args += "-cdrom"; args += "/dev/fd/${pfd.detachFd()}"
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to open ISO URI: ${config.isoUri}", e)
+            }
         }
 
         val storagePath = File(context.filesDir, "storage.img")
@@ -639,8 +665,9 @@ class QemuEngine @Inject constructor(
         }
     }
 
-    private fun qemuExecutable(): File? {
-        val exe = File(context.applicationInfo.nativeLibraryDir, "libqemu-system-aarch64.so")
+    private fun qemuExecutable(config: VmConfig): File? {
+        val filename = if (config.isoArch == "x86_64") "libqemu-system-x86_64.so" else "libqemu-system-aarch64.so"
+        val exe = File(context.applicationInfo.nativeLibraryDir, filename)
         return if (exe.exists()) exe else null
     }
 

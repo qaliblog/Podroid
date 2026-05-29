@@ -227,33 +227,12 @@ RUN printf '#!/bin/sh\nexport PKG_CONFIG_LIBDIR=/opt/deps/lib/pkgconfig\nexport 
     > /usr/local/bin/aarch64-android-pkg-config && chmod +x /usr/local/bin/aarch64-android-pkg-config \
     && ln -s /usr/local/bin/aarch64-android-pkg-config ${LLVM}/bin/llvm-pkg-config
 
-RUN cat > /opt/cross-android-aarch64.ini << 'EOF'
-[binaries]
-c = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang'
-cpp = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang++'
-ar = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-strip = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-ranlib = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib'
-nm = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm'
-pkg-config = '/usr/local/bin/aarch64-android-pkg-config'
-[properties]
-sys_root = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot'
-pkg_config_libdir = ['/opt/deps/lib/pkgconfig']
-c_args = ['--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot', '-target', 'aarch64-linux-android28', '-I/opt/deps/include', '-fPIC', '-O2', '-march=armv8-a']
-cpp_args = ['--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot', '-target', 'aarch64-linux-android28', '-I/opt/deps/include', '-fPIC', '-O2', '-march=armv8-a']
-c_link_args = ['--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot', '-target', 'aarch64-linux-android28', '-L/opt/deps/lib', '-Wl,-z,max-page-size=16384']
-cpp_link_args = ['--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot', '-target', 'aarch64-linux-android28', '-L/opt/deps/lib', '-Wl,-z,max-page-size=16384']
-[host_machine]
-system = 'linux'
-cpu_family = 'aarch64'
-cpu = 'aarch64'
-endian = 'little'
-EOF
+RUN printf '[binaries]\nc = '"'"'/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang'"'"'\ncpp = '"'"'/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang++'"'"'\nar = '"'"'/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'"'"'\nstrip = '"'"'/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'"'"'\nranlib = '"'"'/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib'"'"'\nnm = '"'"'/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm'"'"'\npkg-config = '"'"'/usr/local/bin/aarch64-android-pkg-config'"'"'\n[properties]\nsys_root = '"'"'/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot'"'"'\npkg_config_libdir = ['"'"'/opt/deps/lib/pkgconfig'"'"']\nc_args = ['"'"'--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot'"'"', '"'"'-target'"'"', '"'"'aarch64-linux-android28'"'"', '"'"'-I/opt/deps/include'"'"', '"'"'-fPIC'"'"', '"'"'-O2'"'"', '"'"'-march=armv8-a'"'"']\ncpp_args = ['"'"'--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot'"'"', '"'"'-target'"'"', '"'"'aarch64-linux-android28'"'"', '"'"'-I/opt/deps/include'"'"', '"'"'-fPIC'"'"', '"'"'-O2'"'"', '"'"'-march=armv8-a'"'"']\nc_link_args = ['"'"'--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot'"'"', '"'"'-target'"'"', '"'"'aarch64-linux-android28'"'"', '"'"'-L/opt/deps/lib'"'"', '"'"'-Wl,-z,max-page-size=16384'"'"']\ncpp_link_args = ['"'"'--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot'"'"', '"'"'-target'"'"', '"'"'aarch64-linux-android28'"'"', '"'"'-L/opt/deps/lib'"'"', '"'"'-Wl,-z,max-page-size=16384'"'"']\n[host_machine]\nsystem = '"'"'linux'"'"'\ncpu_family = '"'"'aarch64'"'"'\ncpu = '"'"'aarch64'"'"'\nendian = '"'"'little'"'"'' > /opt/cross-android-aarch64.ini
 
 # Deps (pcre2, libffi, glib, pixman, libattr, libucontext)
 RUN wget -q https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.44/pcre2-10.44.tar.gz && tar xf pcre2-10.44.tar.gz && cd pcre2-10.44 && ./configure --host=aarch64-linux-android --prefix=${PREFIX} --enable-static --disable-shared CC="${CC}" && make -j$(nproc) install
 RUN wget -q https://github.com/libffi/libffi/releases/download/v3.4.6/libffi-3.4.6.tar.gz && tar xf libffi-3.4.6.tar.gz && cd libffi-3.4.6 && ./configure --host=aarch64-linux-android --prefix=${PREFIX} --enable-static --disable-shared CC="${CC}" && make -j$(nproc) install
-RUN wget -q https://download.gnome.org/sources/glib/2.82/glib-2.82.5.tar.xz && tar xf glib-2.82.5.tar.xz && cd glib-2.82.5 && meson setup _build --cross-file /opt/cross-android-aarch64.ini --prefix ${PREFIX} --default-library static -Dselinux=disabled -Dlibmount=disabled && ninja -C _build install
+RUN wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 3 https://download.gnome.org/sources/glib/2.82/glib-2.82.5.tar.xz && tar xf glib-2.82.5.tar.xz && cd glib-2.82.5 && meson setup _build --cross-file /opt/cross-android-aarch64.ini --prefix ${PREFIX} --default-library static -Dselinux=disabled -Dlibmount=disabled && ninja -C _build install
 RUN wget -q https://cairographics.org/releases/pixman-0.44.2.tar.xz && tar xf pixman-0.44.2.tar.xz && cd pixman-0.44.2 && meson setup _build --cross-file /opt/cross-android-aarch64.ini --prefix ${PREFIX} --default-library static -Da64-neon=disabled && ninja -C _build install
 RUN wget -q https://download.savannah.gnu.org/releases/attr/attr-2.5.2.tar.gz && tar xf attr-2.5.2.tar.gz && cd attr-2.5.2 && ./configure --host=aarch64-linux-android --prefix=${PREFIX} --enable-static --disable-shared CC="${CC}" && make -j$(nproc) install && cp ${PREFIX}/lib/libattr.a ${LLVM}/sysroot/usr/lib/aarch64-linux-android/28/libattr.a
 RUN git clone --depth=1 https://github.com/kaniini/libucontext.git /tmp/libucontext && make -C /tmp/libucontext ARCH=aarch64 CC="${CC}" EXPORT_UNPREFIXED=yes && install -Dm644 /tmp/libucontext/libucontext.a ${PREFIX}/lib/libucontext.a && install -Dm644 /tmp/libucontext/include/libucontext/libucontext.h ${PREFIX}/include/libucontext/libucontext.h && install -Dm644 /tmp/libucontext/arch/common/include/libucontext/bits.h ${PREFIX}/include/libucontext/bits.h \
@@ -310,7 +289,7 @@ RUN sed -i '1i#include "/opt/qemu_jmp.h"' ${QEMU_DIR}/util/coroutine-ucontext.c 
 RUN sed -i 's@^    rc = libusb_init(&ctx);@#if defined(__ANDROID__)\n    libusb_set_option(NULL, LIBUSB_OPTION_NO_DEVICE_DISCOVERY); /* unprivileged Android: wrap passed fd only, skip enumeration */\n#endif\n    rc = libusb_init(\&ctx);@' ${QEMU_DIR}/hw/usb/host-libusb.c \
     && grep -q LIBUSB_OPTION_NO_DEVICE_DISCOVERY ${QEMU_DIR}/hw/usb/host-libusb.c
 
-RUN cd ${QEMU_DIR} && ./configure --cc="${CC}" --cross-prefix="${LLVM}/bin/llvm-" --extra-cflags="-fPIC -DANDROID -include /opt/shm_shim.h -I${PREFIX}/include -I${PREFIX}/include/glib-2.0 -I${PREFIX}/lib/glib-2.0/include" --extra-ldflags="-L${PREFIX}/lib -Wl,-z,max-page-size=16384 ${PREFIX}/lib/libucontext.a ${PREFIX}/lib/libshm.a ${PREFIX}/lib/libqemujmp.a" --prefix=/opt/qemu-out --target-list=aarch64-softmmu --enable-tcg --enable-slirp --enable-virtfs --enable-libusb --enable-pie --disable-docs --disable-gtk --disable-sdl --disable-vnc --disable-vhost-user --disable-plugins --with-coroutine=ucontext && make -j$(nproc) install
+RUN cd ${QEMU_DIR} && ./configure --cc="${CC}" --cross-prefix="${LLVM}/bin/llvm-" --extra-cflags="-fPIC -DANDROID -include /opt/shm_shim.h -I${PREFIX}/include -I${PREFIX}/include/glib-2.0 -I${PREFIX}/lib/glib-2.0/include" --extra-ldflags="-L${PREFIX}/lib -Wl,-z,max-page-size=16384 ${PREFIX}/lib/libucontext.a ${PREFIX}/lib/libshm.a ${PREFIX}/lib/libqemujmp.a" --prefix=/opt/qemu-out --target-list=aarch64-softmmu,x86_64-softmmu --enable-tcg --enable-slirp --enable-virtfs --enable-libusb --enable-pie --disable-docs --disable-gtk --disable-sdl --disable-vnc --disable-vhost-user --disable-plugins --with-coroutine=ucontext && make -j$(nproc) install
 
 # Bridge
 COPY podroid-bridge.c /tmp/podroid-bridge.c
@@ -322,9 +301,11 @@ RUN ${CC} --sysroot=${LLVM}/sysroot -target aarch64-linux-android28 -fPIE -pie -
 
 # Soname fix
 RUN cp /opt/qemu-out/bin/qemu-system-aarch64 /opt/qemu-out/libqemu-system-aarch64.so \
+    && cp /opt/qemu-out/bin/qemu-system-x86_64 /opt/qemu-out/libqemu-system-x86_64.so \
     && cp /opt/qemu-out/lib/libslirp.so.0 /opt/qemu-out/libslirp.so \
     && patchelf --set-soname libslirp.so /opt/qemu-out/libslirp.so \
-    && patchelf --replace-needed libslirp.so.0 libslirp.so /opt/qemu-out/libqemu-system-aarch64.so
+    && patchelf --replace-needed libslirp.so.0 libslirp.so /opt/qemu-out/libqemu-system-aarch64.so \
+    && patchelf --replace-needed libslirp.so.0 libslirp.so /opt/qemu-out/libqemu-system-x86_64.so
 
 # ==============================================================================
 # SECTION 3: Final Artifacts Stage
@@ -336,6 +317,7 @@ COPY --from=packer /output/vmlinuz-virt /vmlinuz-virt
 COPY --from=packer /output/initrd.img /initrd.img
 # QEMU
 COPY --from=qemu-builder /opt/qemu-out/libqemu-system-aarch64.so /libqemu-system-aarch64.so
+COPY --from=qemu-builder /opt/qemu-out/libqemu-system-x86_64.so /libqemu-system-x86_64.so
 COPY --from=qemu-builder /opt/qemu-out/libslirp.so /libslirp.so
 COPY --from=qemu-builder /opt/qemu-out/libpodroid-bridge.so /libpodroid-bridge.so
 COPY --from=qemu-builder /opt/qemu-out/libpodroid-launcher.so /libpodroid-launcher.so

@@ -115,10 +115,18 @@
     <string name="avf_grant_commands">adb shell pm grant com.excp.podroid \\\n  android.permission.MANAGE_VIRTUAL_MACHINE\nadb shell pm grant com.excp.podroid \\\n  android.permission.USE_CUSTOM_VIRTUAL_MACHINE</string>
 
     <!-- Setup Steps -->
-    <string name="step_1_of_4">第 1 步，共 4 步</string>
-    <string name="step_2_of_4">第 2 步，共 4 步</string>
-    <string name="step_3_of_4">第 3 步，共 4 步</string>
-    <string name="step_4_of_4">第 4 步，共 4 步</string>
+    <string name="step_1_of_5">第 1 步，共 5 步</string>
+    <string name="step_2_of_5">第 2 步，共 5 步</string>
+    <string name="step_3_of_5">第 3 步，共 5 步</string>
+    <string name="step_4_of_5">第 4 步，共 5 步</string>
+    <string name="step_5_of_5">第 5 步，共 5 步</string>
+
+    <!-- ISO Selection -->
+    <string name="iso_selection_title">自定义 ISO（可选）</string>
+    <string name="iso_selection_description">选择一个 ISO 文件以启动不同的操作系统。如果未选择，Podroid 将启动内置的 Alpine Linux。</string>
+    <string name="pick_iso_label">选择 ISO 文件</string>
+    <string name="no_iso_selected">未选择 ISO</string>
+    <string name="iso_arch_label">访客架构</string>
 
     <!-- Dialogs -->
     <string name="update_available">有新版本可用</string>

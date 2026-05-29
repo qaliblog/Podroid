@@ -39,12 +39,12 @@ android {
 
     signingConfigs {
         create("release") {
-            val storePath = (project.findProperty("PODROID_RELEASE_STORE_FILE") as? String)
-            if (storePath != null && file(storePath).exists()) {
+            val storePath = (project.findProperty("PODROID_RELEASE_STORE_FILE") as? String) ?: "release.jks"
+            if (file(storePath).exists()) {
                 storeFile     = file(storePath)
-                storePassword = project.findProperty("PODROID_RELEASE_STORE_PASSWORD") as? String
-                keyAlias      = project.findProperty("PODROID_RELEASE_KEY_ALIAS")      as? String
-                keyPassword   = project.findProperty("PODROID_RELEASE_KEY_PASSWORD")   as? String
+                storePassword = (project.findProperty("PODROID_RELEASE_STORE_PASSWORD") as? String) ?: "password"
+                keyAlias      = (project.findProperty("PODROID_RELEASE_KEY_ALIAS")      as? String) ?: "podroid"
+                keyPassword   = (project.findProperty("PODROID_RELEASE_KEY_PASSWORD")   as? String) ?: "password"
             }
         }
     }
