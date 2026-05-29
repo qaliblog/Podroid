@@ -227,28 +227,7 @@ RUN printf '#!/bin/sh\nexport PKG_CONFIG_LIBDIR=/opt/deps/lib/pkgconfig\nexport 
     > /usr/local/bin/aarch64-android-pkg-config && chmod +x /usr/local/bin/aarch64-android-pkg-config \
     && ln -s /usr/local/bin/aarch64-android-pkg-config ${LLVM}/bin/llvm-pkg-config
 
-RUN cat > /opt/cross-android-aarch64.ini << 'EOF'
-[binaries]
-c = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang'
-cpp = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang++'
-ar = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-strip = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-ranlib = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib'
-nm = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm'
-pkg-config = '/usr/local/bin/aarch64-android-pkg-config'
-[properties]
-sys_root = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot'
-pkg_config_libdir = ['/opt/deps/lib/pkgconfig']
-c_args = ['--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot', '-target', 'aarch64-linux-android28', '-I/opt/deps/include', '-fPIC', '-O2', '-march=armv8-a']
-cpp_args = ['--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot', '-target', 'aarch64-linux-android28', '-I/opt/deps/include', '-fPIC', '-O2', '-march=armv8-a']
-c_link_args = ['--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot', '-target', 'aarch64-linux-android28', '-L/opt/deps/lib', '-Wl,-z,max-page-size=16384']
-cpp_link_args = ['--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot', '-target', 'aarch64-linux-android28', '-L/opt/deps/lib', '-Wl,-z,max-page-size=16384']
-[host_machine]
-system = 'linux'
-cpu_family = 'aarch64'
-cpu = 'aarch64'
-endian = 'little'
-EOF
+RUN printf '[binaries]\nc = '"'"'${LLVM}/bin/aarch64-linux-android28-clang'"'"'\ncpp = '"'"'${LLVM}/bin/aarch64-linux-android28-clang++'"'"'\nar = '"'"'${LLVM}/bin/llvm-ar'"'"'\nstrip = '"'"'${LLVM}/bin/llvm-strip'"'"'\nranlib = '"'"'${LLVM}/bin/llvm-ranlib'"'"'\nnm = '"'"'${LLVM}/bin/llvm-nm'"'"'\npkg-config = '"'"'/usr/local/bin/aarch64-android-pkg-config'"'"'\n[properties]\nsys_root = '"'"'${LLVM}/sysroot'"'"'\npkg_config_libdir = ['"'"'/opt/deps/lib/pkgconfig'"'"']\nc_args = ['"'"'--sysroot=${LLVM}/sysroot'"'"', '"'"'-target'"'"', '"'"'aarch64-linux-android28'"'"', '"'"'-I/opt/deps/include'"'"', '"'"'-fPIC'"'"', '"'"'-O2'"'"', '"'"'-march=armv8-a'"'"']\ncpp_args = ['"'"'--sysroot=${LLVM}/sysroot'"'"', '"'"'-target'"'"', '"'"'aarch64-linux-android28'"'"', '"'"'-I/opt/deps/include'"'"', '"'"'-fPIC'"'"', '"'"'-O2'"'"', '"'"'-march=armv8-a'"'"']\nc_link_args = ['"'"'--sysroot=${LLVM}/sysroot'"'"', '"'"'-target'"'"', '"'"'aarch64-linux-android28'"'"', '"'"'-L/opt/deps/lib'"'"', '"'"'-Wl,-z,max-page-size=16384'"'"']\ncpp_link_args = ['"'"'--sysroot=${LLVM}/sysroot'"'"', '"'"'-target'"'"', '"'"'aarch64-linux-android28'"'"', '"'"'-L/opt/deps/lib'"'"', '"'"'-Wl,-z,max-page-size=16384'"'"']\n[host_machine]\nsystem = '"'"'linux'"'"'\ncpu_family = '"'"'aarch64'"'"'\ncpu = '"'"'aarch64'"'"'\nendian = '"'"'little'"'"'' > /opt/cross-android-aarch64.ini
 
 # Deps (pcre2, libffi, glib, pixman, libattr, libucontext)
 RUN wget -q https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.44/pcre2-10.44.tar.gz && tar xf pcre2-10.44.tar.gz && cd pcre2-10.44 && ./configure --host=aarch64-linux-android --prefix=${PREFIX} --enable-static --disable-shared CC="${CC}" && make -j$(nproc) install
