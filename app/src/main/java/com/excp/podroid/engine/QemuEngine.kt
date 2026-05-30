@@ -493,6 +493,21 @@ class QemuEngine @Inject constructor(
         val isX86 = config.isoArch == "x86_64"
         val isIso = !config.isoUri.isNullOrEmpty()
 
+        /*
+         * Note on branch differences:
+         *
+         * The 'main' branch of Podroid uses direct kernel booting for its
+         * built-in Alpine VM, passing:
+         *   -kernel vmlinuz-virt
+         *   -initrd initrd.img
+         *   -append "console=ttyAMA0 ..."
+         *
+         * This branch maintains that fallback for the built-in VM (see below).
+         * For custom ISO/IMG booting, QEMU uses the ISO's own bootloader.
+         * On aarch64, this typically requires UEFI firmware (QEMU_EFI.fd),
+         * which is currently a limitation for generic aarch64 ISOs.
+         */
+
         if (isX86) {
             args += "-M"; args += "q35"
             args += "-cpu"; args += "max"
@@ -541,7 +556,17 @@ class QemuEngine @Inject constructor(
                 val uri = Uri.parse(config.isoUri)
                 val pfd = context.contentResolver.openFileDescriptor(uri, "r")
                 if (pfd != null) {
-                    args += "-cdrom"; args += "/dev/fd/${pfd.detachFd()}"
+                    // Android PFDs are O_CLOEXEC by default. Since we exec()
+                    // via podroid-launcher, we must clear FD_CLOEXEC so the
+                    // descriptor survives into the QEMU process.
+                    val pfdObj = pfd.detachFd()
+                    val fd = java.io.FileDescriptor().apply {
+                        val field = java.io.FileDescriptor::class.java.getDeclaredField("descriptor")
+                        field.isAccessible = true
+                        field.setInt(this, pfdObj)
+                    }
+                    android.system.Os.fcntlInt(fd, android.system.OsConstants.F_SETFD, 0)
+                    args += "-cdrom"; args += "/dev/fd/$pfdObj"
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to open ISO URI: ${config.isoUri}", e)
