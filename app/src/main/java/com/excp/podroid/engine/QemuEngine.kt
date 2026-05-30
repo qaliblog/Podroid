@@ -266,7 +266,14 @@ class QemuEngine @Inject constructor(
             return
         }
 
-        ensureStorageImage(config.storageSizeGb)
+        try {
+            ensureStorageImage(config.storageSizeGb)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to ensure storage image", e)
+            _state.value = VmState.Error("Failed to initialize storage: ${e.message}")
+            cleanup()
+            return
+        }
 
         _consoleText.value = ""
         _bootStage.value = "Starting QEMU..."
@@ -559,14 +566,10 @@ class QemuEngine @Inject constructor(
                     // Android PFDs are O_CLOEXEC by default. Since we exec()
                     // via podroid-launcher, we must clear FD_CLOEXEC so the
                     // descriptor survives into the QEMU process.
-                    val pfdObj = pfd.detachFd()
-                    val fd = java.io.FileDescriptor().apply {
-                        val field = java.io.FileDescriptor::class.java.getDeclaredField("descriptor")
-                        field.isAccessible = true
-                        field.setInt(this, pfdObj)
-                    }
+                    val fd = pfd.fileDescriptor
                     android.system.Os.fcntlInt(fd, android.system.OsConstants.F_SETFD, 0)
-                    args += "-cdrom"; args += "/dev/fd/$pfdObj"
+                    val detachedFd = pfd.detachFd()
+                    args += "-cdrom"; args += "/proc/self/fd/$detachedFd"
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to open ISO URI: ${config.isoUri}", e)

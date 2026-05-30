@@ -14,7 +14,43 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  build-native:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Cache native components
+        id: cache-native
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/src/main/jniLibs/arm64-v8a/
+            app/src/main/assets/
+          key: native-${{ hashFiles('Dockerfile', 'build-rootfs/**', 'podroid-bridge.c', 'podroid-launcher.c', 'build-all.sh') }}
+
+      - name: Set up QEMU
+        if: steps.cache-native.outputs.cache-hit != 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Build native components
+        if: steps.cache-native.outputs.cache-hit != 'true'
+        run: |
+          ./build-all.sh initramfs
+          ./build-all.sh rootfs
+          ./build-all.sh qemu
+
+      - name: Upload native artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-bins
+          path: |
+            app/src/main/jniLibs/arm64-v8a/
+            app/src/main/assets/
+          retention-days: 1
+
+  build-apk:
+    needs: build-native
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -27,14 +63,12 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - name: Download native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: native-bins
 
-      - name: Build all components (Kernel, Rootfs, QEMU, APK)
-        run: |
-          ./build-all.sh all
-
-      - name: Sign APK
+      - name: Build Release APK
         run: |
           ./gradlew assembleRelease
 
