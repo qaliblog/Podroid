@@ -256,13 +256,16 @@ class QemuEngine @Inject constructor(
         }
 
         val qemuExe = qemuExecutable(config) ?: run {
+            val nativeDir = context.applicationInfo.nativeLibraryDir
+            val files = File(nativeDir).listFiles()?.joinToString { it.name } ?: "(empty)"
+            Log.e(TAG, "QEMU binary not found in $nativeDir. Available files: $files")
             // The startMutex block already set cleanedUp=false and bootStartTime;
             // restore the "cleanedUp=false ⟺ a VM lifetime is in progress"
             // invariant on this early-error return, matching the other error
             // paths (which run cleanup()). No process/scope exists yet.
             cleanedUp.set(true)
             bootStartTime = 0L
-            _state.value = VmState.Error("QEMU binary not found.")
+            _state.value = VmState.Error("QEMU binary not found. Please reinstall the app.")
             return
         }
 
@@ -290,6 +293,28 @@ class QemuEngine @Inject constructor(
         File(ctrlSockPath).delete()
         File(qmpSocketPath).delete()
         File(hostSockPath).delete()
+
+        val isIso = !config.isoUri.isNullOrEmpty()
+        if (isIso && config.isoUri != null) {
+            _bootStage.value = "Preparing boot image..."
+            try {
+                val uri = Uri.parse(config.isoUri)
+                val destFile = File(context.filesDir, "boot.iso")
+                // Copy the user-selected ISO to app internal storage. On Android 15
+                // (API 35), SELinux often blocks child processes (QEMU) from
+                // opening FDs passed from the parent app via /proc/self/fd/N
+                // or /dev/fd/N. Localizing the file bypasses this barrier.
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    destFile.outputStream().use { output -> input.copyTo(output) }
+                } ?: throw java.io.IOException("Failed to open ISO input stream")
+                Log.i(TAG, "ISO localized to internal storage: ${destFile.length()} bytes")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to localize ISO", e)
+                _state.value = VmState.Error("Failed to prepare boot image: ${e.message}")
+                cleanup()
+                return
+            }
+        }
 
         try {
             val cmd = buildCommand(qemuExe, portForwards, config)
@@ -567,20 +592,11 @@ class QemuEngine @Inject constructor(
         }
 
         if (isIso && config.isoUri != null) {
-            try {
-                val uri = Uri.parse(config.isoUri)
-                val pfd = context.contentResolver.openFileDescriptor(uri, "r")
-                if (pfd != null) {
-                    // Android PFDs are O_CLOEXEC by default. Since we exec()
-                    // via podroid-launcher, we must clear FD_CLOEXEC so the
-                    // descriptor survives into the QEMU process.
-                    val fd = pfd.fileDescriptor
-                    android.system.Os.fcntlInt(fd, android.system.OsConstants.F_SETFD, 0)
-                    val detachedFd = pfd.detachFd()
-                    args += "-cdrom"; args += "/proc/self/fd/$detachedFd"
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to open ISO URI: ${config.isoUri}", e)
+            val destFile = File(context.filesDir, "boot.iso")
+            if (destFile.exists()) {
+                args += "-cdrom"; args += destFile.absolutePath
+            } else {
+                Log.e(TAG, "Localized ISO not found at ${destFile.absolutePath}")
             }
         }
 

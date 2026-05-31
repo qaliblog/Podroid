@@ -27,7 +27,7 @@ jobs:
           path: |
             app/src/main/jniLibs/arm64-v8a/
             app/src/main/assets/
-          key: native-${{ hashFiles('Dockerfile', 'build-rootfs/**', 'podroid-bridge.c', 'podroid-launcher.c', 'build-all.sh') }}
+          key: native-${{ hashFiles('Dockerfile', 'build-rootfs/**', 'podroid-bridge.c', 'podroid-launcher.c', 'build-all.sh', 'gradle.properties', 'podroid_kernel.config') }}
 
       - name: Set up QEMU
         if: steps.cache-native.outputs.cache-hit != 'true'
@@ -44,7 +44,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: native-bins
-          path: app/src/main/
+          path: |
+            app/src/main/jniLibs/
+            app/src/main/assets/
           retention-days: 1
 
   build-apk:
@@ -65,7 +67,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: native-bins
-          path: app/src/main/
 
       - name: Build Release APK
         run: |
