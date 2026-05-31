@@ -46,12 +46,6 @@ int main(int argc, char *argv[]) {
      * orphan-cleanup guarantee (i.e. revert to today's behavior). */
     (void)prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0);
 
-    /* Race guard: between ProcessBuilder.start() and our prctl() call, the
-     * parent may already have died. If so, we've already been reparented to
-     * init (PID 1). Bail immediately so we never become an orphan ourselves. */
-    if (getppid() == 1) {
-        return 1;
-    }
 
     /* exec the real QEMU. PR_SET_PDEATHSIG is preserved across execve()
      * (only cleared on setuid execs, which we never do). */

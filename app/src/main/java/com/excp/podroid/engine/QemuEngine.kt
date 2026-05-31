@@ -401,7 +401,15 @@ class QemuEngine @Inject constructor(
             _state.value = when {
                 priorError != null -> priorError
                 exitCode == 0 -> VmState.Stopped
-                else -> VmState.Error(formatExitError(exitCode, config.storageAccessEnabled))
+                else -> {
+                    val msg = formatExitError(exitCode, config.storageAccessEnabled)
+                    val lastErr = synchronized(stderrTail) { stderrTail.lastOrNull() }
+                    if (lastErr != null) {
+                        VmState.Error("$msg\n\nQEMU stderr:\n$lastErr")
+                    } else {
+                        VmState.Error(msg)
+                    }
+                }
             }
         } catch (e: CancellationException) {
             // The start() coroutine lives in PodroidService.serviceScope, which

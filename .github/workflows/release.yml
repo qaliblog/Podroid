@@ -44,9 +44,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: native-bins
-          path: |
-            app/src/main/jniLibs/arm64-v8a/
-            app/src/main/assets/
+          path: app/src/main/
           retention-days: 1
 
   build-apk:
@@ -67,6 +65,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: native-bins
+          path: app/src/main/
 
       - name: Build Release APK
         run: |
