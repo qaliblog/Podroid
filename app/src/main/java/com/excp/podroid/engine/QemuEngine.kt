@@ -554,8 +554,8 @@ class QemuEngine @Inject constructor(
             args += "-cpu"; args += "max"
         } else {
             args += "-M"; args += "virt,gic-version=3"
-            // pauth-impdef swaps QEMU's slow QARMA5 PAuth for a fast non-crypto impl (≤50% TCG win on aarch64-on-aarch64).
-            args += "-cpu"; args += "max,pauth-impdef=on"
+            // sve=off: expensive to TCG-translate and rarely used in VMs; pauth-impdef: fast non-crypto PAuth (≤50% TCG win).
+            args += "-cpu"; args += "max,sve=off,pauth-impdef=on"
         }
 
         val tbSizeMb = if (config.ramMb >= 2048) 512 else 256
@@ -685,7 +685,14 @@ class QemuEngine @Inject constructor(
 
         // User extras appended last so later -cpu / -accel overrides earlier ones.
         if (userQemuExtras.isNotEmpty()) {
-            args += userQemuExtras.split(Regex("\\s+"))
+            var extras = userQemuExtras
+            if (isX86) {
+                // Safeguard: remove AArch64-only flags (often left in user settings from defaults) to prevent x86_64 crash.
+                extras = extras.replace("sve=off", "").replace("pauth-impdef=on", "").trim()
+            }
+            if (extras.isNotEmpty()) {
+                args += extras.split(Regex("\\s+")).filter { it.isNotBlank() }
+            }
         }
 
         // Wrap QEMU in podroid-launcher when available — it sets PR_SET_PDEATHSIG
