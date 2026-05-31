@@ -321,5 +321,4 @@ COPY --from=qemu-builder /opt/qemu-out/libqemu-system-x86_64.so /libqemu-system-
 COPY --from=qemu-builder /opt/qemu-out/libslirp.so /libslirp.so
 COPY --from=qemu-builder /opt/qemu-out/libpodroid-bridge.so /libpodroid-bridge.so
 COPY --from=qemu-builder /opt/qemu-out/libpodroid-launcher.so /libpodroid-launcher.so
-COPY --from=qemu-builder /opt/qemu-out/share/qemu/efi-virtio.rom /qemu/efi-virtio.rom
-COPY --from=qemu-builder /opt/qemu-out/share/qemu/keymaps/ /qemu/keymaps/
+COPY --from=qemu-builder /opt/qemu-out/share/qemu/ /qemu/

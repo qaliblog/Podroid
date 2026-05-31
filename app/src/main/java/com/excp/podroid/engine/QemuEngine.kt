@@ -561,6 +561,9 @@ class QemuEngine @Inject constructor(
         val tbSizeMb = if (config.ramMb >= 2048) 512 else 256
         // thread=multi: one host thread per vCPU; larger tb-size reduces re-translation for JIT-heavy guests.
         args += "-accel"; args += "tcg,thread=multi,tb-size=$tbSizeMb"
+        // Search path for firmware (SeaBIOS/VGABIOS) and keymaps — points to the internal filesDir
+        // where assets are extracted. Matches the directory structure of the 'share/qemu' install.
+        args += "-L";    args += context.filesDir.absolutePath
         args += "-smp"; args += "${config.cpus}"
         args += "-m";   args += "${config.ramMb}"
 
