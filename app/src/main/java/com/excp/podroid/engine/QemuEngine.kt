@@ -519,6 +519,7 @@ class QemuEngine @Inject constructor(
         File(serialSockPath).delete()
         File(terminalSockPath).delete()
         File(ctrlSockPath).delete()
+        File(context.filesDir, "boot.iso").delete()
         _bootStage.value = ""
     }
 
