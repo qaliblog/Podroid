@@ -379,6 +379,17 @@ class QemuEngine @Inject constructor(
                 if (File(serialSockPath).exists() && File(qmpSocketPath).exists()) {
                     Log.d(TAG, "QEMU sockets ready after ${System.currentTimeMillis() - startMs}ms")
                     socketsReady = true
+
+                    if (isIso) {
+                        // Generic ISOs don't emit the "Ready!" marker. Promote to Running
+                        // immediately so the terminal can be opened.
+                        _bootStage.value = "Ready"
+                        persistBootDuration()
+                        _runningSinceMs = System.currentTimeMillis()
+                        _state.value = VmState.Running
+                        autoStartBridge()
+                    }
+
                     break
                 }
                 delay(200)
@@ -667,14 +678,20 @@ class QemuEngine @Inject constructor(
             args += "-device"; args += "qemu-xhci,id=usbhc0"
         }
 
-        // ── Serial (ttyAMA0) → boot log sink only; kernel msgs + init boot stages ─
-        args += "-serial"; args += "unix:$serialSockPath,server,nowait"
+        // ── Serial (ttyAMA0 / ttyS0) ──────────────────────────────────────────
+        // Generic ISOs typically use serial for their console. For ISO boots, map
+        // the serial port to terminal.sock (where the interactive bridge connects)
+        // so the terminal isn't empty.
+        val serialPath = if (isIso) terminalSockPath else serialSockPath
+        args += "-serial"; args += "unix:$serialPath,server,nowait"
 
         // ── virtio-console bus ────────────────────────────────────────────────
-        // hvc0 = primary terminal (getty runs here; bridge connects to terminal.sock)
-        // hvc1 = control channel (init daemon reads RESIZE messages from ctrl.sock)
+        // hvc0 = primary terminal (getty runs here; bridge connects to terminal.sock).
+        // For ISO boots, move hvc0 to serial.sock so the boot log monitor can still
+        // capture any early virtio output if the guest uses it.
+        val hvc0Path = if (isIso) serialSockPath else terminalSockPath
         args += "-device";  args += "virtio-serial-pci"
-        args += "-chardev"; args += "socket,id=term0,path=$terminalSockPath,server=on,wait=off"
+        args += "-chardev"; args += "socket,id=term0,path=$hvc0Path,server=on,wait=off"
         args += "-device";  args += "virtconsole,chardev=term0,name=org.podroid.term"
         args += "-chardev"; args += "socket,id=ctrl0,path=$ctrlSockPath,server=on,wait=off"
         args += "-device";  args += "virtconsole,chardev=ctrl0,name=org.podroid.ctrl"
