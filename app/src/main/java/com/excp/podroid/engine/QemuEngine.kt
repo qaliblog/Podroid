@@ -691,7 +691,10 @@ class QemuEngine @Inject constructor(
             var extras = userQemuExtras
             if (isX86) {
                 // Safeguard: remove AArch64-only flags (often left in user settings from defaults) to prevent x86_64 crash.
-                extras = extras.replace("sve=off", "").replace("pauth-impdef=on", "").trim()
+                // Property 'max-x86_64-cpu.sve' not found.
+                extras = extras.replace(Regex(",?\\s*sve=off"), "")
+                               .replace(Regex(",?\\s*pauth-impdef=on"), "")
+                               .trim()
             }
             if (extras.isNotEmpty()) {
                 args += extras.split(Regex("\\s+")).filter { it.isNotBlank() }
