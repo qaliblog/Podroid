@@ -35,6 +35,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.windowsizeclass.WindowHeightSizeClass
@@ -236,6 +238,15 @@ fun SettingsScreen(
                 PodroidListRow(
                     label = stringResource(R.string.storage),
                     value = "${ui.storageSizeGb} GB",
+                )
+                BootModeSection(
+                    bootMode = ui.bootMode,
+                    customUri = ui.customImageUri,
+                    arch = ui.isoArch,
+                    onModeChange = { viewModel.setBootMode(it) },
+                    onUriChange = { viewModel.setCustomImageUri(it) },
+                    onArchChange = { viewModel.setIsoArch(it) },
+                    vmNotRunning = vmNotRunning,
                 )
 
                 // ── NETWORK ───────────────────────────────────────────
@@ -519,6 +530,110 @@ private fun RamSection(currentMb: Int, onChange: (Int) -> Unit, enabled: Boolean
                 )
             }
         }
+        HorizontalDivider(
+            color = MaterialTheme.colorScheme.outline,
+            thickness = 1.dp,
+            modifier = Modifier.padding(top = PodroidTokens.Spacing.MD),
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun BootModeSection(
+    bootMode: com.excp.podroid.engine.BootMode,
+    customUri: String,
+    arch: String,
+    onModeChange: (com.excp.podroid.engine.BootMode) -> Unit,
+    onUriChange: (String) -> Unit,
+    onArchChange: (String) -> Unit,
+    vmNotRunning: Boolean,
+) {
+    val context = LocalContext.current
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+        onResult = { uri ->
+            uri?.let {
+                context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                onUriChange(it.toString())
+            }
+        }
+    )
+
+    Column(modifier = Modifier.padding(bottom = PodroidTokens.Spacing.SM)) {
+        Text(
+            stringResource(R.string.boot_source_label),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(
+                top = PodroidTokens.Spacing.MD,
+                bottom = PodroidTokens.Spacing.SM,
+            ),
+        )
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(PodroidTokens.Spacing.SM),
+            verticalArrangement = Arrangement.spacedBy(PodroidTokens.Spacing.SM),
+        ) {
+            com.excp.podroid.engine.BootMode.entries.forEach { mode ->
+                FilterChip(
+                    selected = bootMode == mode,
+                    enabled = vmNotRunning,
+                    onClick = { onModeChange(mode) },
+                    label = {
+                        Text(
+                            when (mode) {
+                                com.excp.podroid.engine.BootMode.BUILTIN -> stringResource(R.string.boot_mode_builtin)
+                                com.excp.podroid.engine.BootMode.ISO -> stringResource(R.string.boot_mode_iso)
+                                com.excp.podroid.engine.BootMode.DISK -> stringResource(R.string.boot_mode_disk)
+                            }
+                        )
+                    },
+                    shape = RoundedCornerShape(PodroidTokens.Radius.Chip),
+                    colors = PodroidChipColors(),
+                )
+            }
+        }
+
+        if (bootMode != com.excp.podroid.engine.BootMode.BUILTIN) {
+            PodroidListRow(
+                label = stringResource(R.string.pick_iso_label),
+                value = customUri.substringAfterLast("/").ifEmpty { stringResource(R.string.none) },
+                onClick = {
+                    launcher.launch(
+                        arrayOf(
+                            "application/x-iso9660-image",
+                            "application/octet-stream",
+                            "application/x-cd-image",
+                            "application/x-raw-disk-image"
+                        )
+                    )
+                },
+            )
+        }
+
+        Text(
+            stringResource(R.string.iso_arch_label),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(
+                top = PodroidTokens.Spacing.MD,
+                bottom = PodroidTokens.Spacing.SM,
+            ),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("aarch64", "x86_64").forEach { a ->
+                FilterChip(
+                    selected = arch == a,
+                    enabled = vmNotRunning,
+                    onClick = { onArchChange(a) },
+                    label = { Text(a) },
+                    shape = RoundedCornerShape(PodroidTokens.Radius.Chip),
+                    colors = PodroidChipColors(),
+                )
+            }
+        }
+
         HorizontalDivider(
             color = MaterialTheme.colorScheme.outline,
             thickness = 1.dp,

@@ -86,7 +86,8 @@ fun SetupScreen(
     var sshEnabled by rememberSaveable { mutableStateOf(true) }
     var storageAccessEnabled by rememberSaveable { mutableStateOf(false) }
     var usbPassthroughEnabled by rememberSaveable { mutableStateOf(false) }
-    var isoUri by rememberSaveable { mutableStateOf("") }
+    var bootMode by rememberSaveable { mutableStateOf(com.excp.podroid.engine.BootMode.BUILTIN) }
+    var customImageUri by rememberSaveable { mutableStateOf("") }
     var isoArch by rememberSaveable { mutableStateOf("aarch64") }
     val usbPassthroughAvailable = remember { viewModel.usbPassthroughAvailable() }
     val setupComplete by viewModel.setupComplete.collectAsStateWithLifecycle()
@@ -158,9 +159,11 @@ fun SetupScreen(
                     )
                     1 -> IsoSelectionPage(
                         windowSizeClass = windowSizeClass,
-                        selectedUri = isoUri,
+                        bootMode = bootMode,
+                        onBootModeChange = { bootMode = it },
+                        selectedUri = customImageUri,
                         selectedArch = isoArch,
-                        onUriSelected = { isoUri = it },
+                        onUriSelected = { customImageUri = it },
                         onArchSelected = { isoArch = it },
                         onBack = { scope.launch { pagerState.animateScrollToPage(0) } },
                         onNext = { scope.launch { pagerState.animateScrollToPage(2) } },
@@ -214,7 +217,8 @@ fun SetupScreen(
                                 sshEnabled = sshEnabled,
                                 storageAccessEnabled = storageAccessEnabled,
                                 usbPassthroughEnabled = usbPassthroughEnabled && usbPassthroughAvailable,
-                                isoUri = isoUri,
+                                bootMode = bootMode,
+                                customImageUri = customImageUri,
                                 isoArch = isoArch,
                             )
                         },
@@ -368,9 +372,12 @@ private fun StoragePage(
 
 // ── Page 2: ISO Selection ─────────────────────────────────────────────────────
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun IsoSelectionPage(
     windowSizeClass: WindowSizeClass,
+    bootMode: com.excp.podroid.engine.BootMode,
+    onBootModeChange: (com.excp.podroid.engine.BootMode) -> Unit,
     selectedUri: String,
     selectedArch: String,
     onUriSelected: (String) -> Unit,
@@ -402,26 +409,52 @@ private fun IsoSelectionPage(
             )
         }
     ) {
-        PodroidSectionLabel(stringResource(R.string.pick_iso_label))
-        PodroidPrimaryButton(
-            text = if (selectedUri.isEmpty()) stringResource(R.string.pick_iso_label) else selectedUri.substringAfterLast("/"),
-            onClick = {
-                launcher.launch(
-                    arrayOf(
-                        "application/x-iso9660-image",
-                        "application/octet-stream",
-                        "application/x-cd-image",
-                        "application/x-raw-disk-image"
-                    )
+        PodroidSectionLabel(stringResource(R.string.boot_source_label))
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            com.excp.podroid.engine.BootMode.entries.forEach { mode ->
+                FilterChip(
+                    selected = bootMode == mode,
+                    onClick = { onBootModeChange(mode) },
+                    label = {
+                        Text(
+                            when (mode) {
+                                com.excp.podroid.engine.BootMode.BUILTIN -> stringResource(R.string.boot_mode_builtin)
+                                com.excp.podroid.engine.BootMode.ISO -> stringResource(R.string.boot_mode_iso)
+                                com.excp.podroid.engine.BootMode.DISK -> stringResource(R.string.boot_mode_disk)
+                            }
+                        )
+                    },
+                    colors = PodroidChipColors()
                 )
             }
-        )
-        if (selectedUri.isEmpty()) {
-            Text(
-                text = stringResource(R.string.no_iso_selected),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+        }
+
+        if (bootMode != com.excp.podroid.engine.BootMode.BUILTIN) {
+            Spacer(Modifier.height(PodroidTokens.Spacing.LG))
+            PodroidSectionLabel(stringResource(R.string.pick_iso_label))
+            PodroidPrimaryButton(
+                text = if (selectedUri.isEmpty()) stringResource(R.string.pick_iso_label) else selectedUri.substringAfterLast("/"),
+                onClick = {
+                    launcher.launch(
+                        arrayOf(
+                            "application/x-iso9660-image",
+                            "application/octet-stream",
+                            "application/x-cd-image",
+                            "application/x-raw-disk-image"
+                        )
+                    )
+                }
             )
+            if (selectedUri.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.no_iso_selected),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
 
         Spacer(Modifier.height(PodroidTokens.Spacing.LG))

@@ -42,7 +42,8 @@ class SetupViewModel @Inject constructor(
         sshEnabled: Boolean,
         storageAccessEnabled: Boolean,
         usbPassthroughEnabled: Boolean,
-        isoUri: String,
+        bootMode: com.excp.podroid.engine.BootMode,
+        customImageUri: String,
         isoArch: String,
     ) {
         viewModelScope.launch {
@@ -51,7 +52,8 @@ class SetupViewModel @Inject constructor(
                 prefs[SettingsRepository.KEY_SSH_ENABLED] = sshEnabled
                 prefs[SettingsRepository.KEY_STORAGE_ACCESS_ENABLED] = storageAccessEnabled
                 prefs[SettingsRepository.KEY_USB_PASSTHROUGH_ENABLED] = usbPassthroughEnabled
-                prefs[SettingsRepository.KEY_ISO_URI] = isoUri
+                prefs[SettingsRepository.KEY_BOOT_MODE] = bootMode.name
+                prefs[SettingsRepository.KEY_CUSTOM_IMAGE_URI] = customImageUri
                 prefs[SettingsRepository.KEY_ISO_ARCH] = isoArch
                 prefs[SettingsRepository.KEY_SETUP_DONE] = true
             }

@@ -79,6 +79,12 @@ interface VmEngine {
  * Engine-agnostic launch parameters. Strict superset of PodroidQemu.LaunchConfig
  * so existing call sites don't change.
  */
+enum class BootMode {
+    BUILTIN, // Alpine built-in
+    ISO,     // Boot from ISO (CD-ROM)
+    DISK     // Boot from custom disk image (Cloud Image / installed OS)
+}
+
 data class VmConfig(
     val ramMb: Int = 512,
     val cpus: Int = 1,
@@ -91,6 +97,8 @@ data class VmConfig(
     val verboseLogging: Boolean = false,
     val x11Dpi: Int = 96,
     val usbPassthroughEnabled: Boolean = false,
-    val isoUri: String? = null,
+    val bootMode: BootMode = BootMode.BUILTIN,
+    val customImageUri: String? = null,
+    val isoUri: String? = null, // Kept for backward compat / specific ISO logic
     val isoArch: String = "aarch64",
 )

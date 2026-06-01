@@ -26,7 +26,9 @@ for _i in $(seq 1 30); do
     sleep 0.1
 done
 
-# Persistent: format on first boot if needed.
+# Persistent: format on first boot ONLY if it doesn't already contain a filesystem.
+# This prevents the built-in Alpine bootloader from wiping a disk where the user
+# has installed another OS.
 # noatime: stop atime writes on every read.
 # commit=1: journal commits every 1s (vs ext4's 5s default) so an abrupt
 #   VM kill (Stop/Restart) loses at most ~1s of writes. QEMU has no per-stop
@@ -36,7 +38,15 @@ done
 #   guest's flushes reach storage.img through QEMU's writeback cache, which
 #   honors flushes, keeping the on-disk journal consistent for recovery.
 if ! mount -t ext4 -o rw,noatime,commit=1,barrier=1 /dev/vda /mnt/persist 2>/dev/null; then
-    e2fsck -y /dev/vda >/dev/null 2>&1 || mkfs.ext4 -q -F /dev/vda
+    # blkid is more reliable for checking existing filesystems than a failed mount.
+    if ! blkid /dev/vda >/dev/null 2>&1; then
+        echo "Formatting /dev/vda as ext4..." > /dev/console
+        mkfs.ext4 -q -F /dev/vda
+    else
+        echo "Existing filesystem detected on /dev/vda, attempting e2fsck..." > /dev/console
+        e2fsck -y /dev/vda >/dev/null 2>&1
+    fi
+
     mount -t ext4 -o rw,noatime,commit=1,barrier=1 /dev/vda /mnt/persist \
         || { echo "FATAL: persistent ext4 (/dev/vda) mount failed" > /dev/console; ls -l /dev/vd* > /dev/console 2>&1; exec sh; }
 fi

@@ -59,6 +59,9 @@ data class SettingsUiState(
     val engineSelection: EngineSelection = EngineSelection.AUTO,
     val language: String = "auto",
     val systemDefaultLanguage: String = "auto",
+    val bootMode: com.excp.podroid.engine.BootMode = com.excp.podroid.engine.BootMode.BUILTIN,
+    val customImageUri: String = "",
+    val isoArch: String = "aarch64",
 )
 
 @HiltViewModel
@@ -107,10 +110,21 @@ class SettingsViewModel @Inject constructor(
         ) { storageAccess, qemu, kernel, dark, dyn ->
             arrayOf(storageAccess, qemu, kernel, dark, dyn)
         },
-        settingsRepository.engineSelection,
-        settingsRepository.language,
-        languageManager.language,
-    ) { a, b, engineSel, lang, sysLang ->
+        combine(
+            combine(
+                settingsRepository.engineSelection,
+                settingsRepository.language,
+                languageManager.language,
+                settingsRepository.bootMode,
+            ) { engineSel, lang, sysLang, bootMode ->
+                arrayOf(engineSel, lang, sysLang, bootMode)
+            },
+            settingsRepository.customImageUri,
+            settingsRepository.isoArch,
+        ) { c1, customUri, arch ->
+            arrayOf(c1[0], c1[1], c1[2], c1[3], customUri, arch)
+        }
+    ) { a, b, c ->
         SettingsUiState(
             vmRamMb = a[0] as Int,
             vmCpus = a[1] as Int,
@@ -121,9 +135,12 @@ class SettingsViewModel @Inject constructor(
             kernelExtraCmdline = b[2] as String,
             darkTheme = b[3] as Boolean,
             dynamicColorEnabled = b[4] as Boolean,
-            engineSelection = engineSel,
-            language = lang,
-            systemDefaultLanguage = sysLang,
+            engineSelection = c[0] as EngineSelection,
+            language = c[1] as String,
+            systemDefaultLanguage = c[2] as String,
+            bootMode = c[3] as com.excp.podroid.engine.BootMode,
+            customImageUri = c[4] as String,
+            isoArch = c[5] as String,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsUiState())
 
@@ -198,6 +215,18 @@ class SettingsViewModel @Inject constructor(
 
     fun setVmCpus(value: Int) {
         viewModelScope.launch { settingsRepository.setVmCpus(value) }
+    }
+
+    fun setBootMode(value: com.excp.podroid.engine.BootMode) {
+        viewModelScope.launch { settingsRepository.setBootMode(value) }
+    }
+
+    fun setCustomImageUri(value: String) {
+        viewModelScope.launch { settingsRepository.setCustomImageUri(value) }
+    }
+
+    fun setIsoArch(value: String) {
+        viewModelScope.launch { settingsRepository.setIsoArch(value) }
     }
 
     fun setTerminalFontSize(value: Int) {

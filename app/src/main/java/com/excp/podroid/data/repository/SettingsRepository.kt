@@ -55,6 +55,8 @@ class SettingsRepository @Inject constructor(
         val KEY_USB_PASSTHROUGH_ENABLED = booleanPreferencesKey("usb_passthrough_enabled")
         val KEY_ISO_URI                 = stringPreferencesKey("iso_uri")
         val KEY_ISO_ARCH                = stringPreferencesKey("iso_arch")
+        val KEY_BOOT_MODE               = stringPreferencesKey("boot_mode")
+        val KEY_CUSTOM_IMAGE_URI        = stringPreferencesKey("custom_image_uri")
 
         val KEY_X11_RES_MODE        = stringPreferencesKey("x11_resolution_mode")
         val KEY_X11_RES_PRESET      = stringPreferencesKey("x11_resolution_preset")
@@ -134,6 +136,13 @@ class SettingsRepository @Inject constructor(
     val usbPassthroughEnabled = pref(KEY_USB_PASSTHROUGH_ENABLED, false)
     val isoUri               = pref(KEY_ISO_URI, "")
     val isoArch              = pref(KEY_ISO_ARCH, "aarch64")
+    val bootMode: Flow<com.excp.podroid.engine.BootMode> = context.dataStore.data
+        .catch { e -> if (e is IOException) emit(androidx.datastore.preferences.core.emptyPreferences()) else throw e }
+        .map { prefs ->
+            runCatching { com.excp.podroid.engine.BootMode.valueOf(prefs[KEY_BOOT_MODE] ?: "BUILTIN") }
+                .getOrDefault(com.excp.podroid.engine.BootMode.BUILTIN)
+        }
+    val customImageUri       = pref(KEY_CUSTOM_IMAGE_URI, "")
     val avfVerboseLogging: Flow<Boolean> = context.dataStore.data
         .catch { e -> if (e is IOException) emit(androidx.datastore.preferences.core.emptyPreferences()) else throw e }
         .map { prefs -> prefs[KEY_AVF_VERBOSE_LOGGING] ?: false }
@@ -167,6 +176,8 @@ class SettingsRepository @Inject constructor(
     suspend fun setUsbPassthroughEnabled(value: Boolean) = set(KEY_USB_PASSTHROUGH_ENABLED, value)
     suspend fun setIsoUri(value: String)                 = set(KEY_ISO_URI, value)
     suspend fun setIsoArch(value: String)                = set(KEY_ISO_ARCH, value)
+    suspend fun setBootMode(value: com.excp.podroid.engine.BootMode) = set(KEY_BOOT_MODE, value.name)
+    suspend fun setCustomImageUri(value: String)         = set(KEY_CUSTOM_IMAGE_URI, value)
 
     val x11Settings: kotlinx.coroutines.flow.Flow<com.excp.podroid.x11.X11Settings> = context.dataStore.data
         .catch { e -> if (e is IOException) emit(androidx.datastore.preferences.core.emptyPreferences()) else throw e }
@@ -217,4 +228,6 @@ class SettingsRepository @Inject constructor(
     suspend fun getUsbPassthroughEnabledSnapshot() = usbPassthroughEnabled.first()
     suspend fun getIsoUriSnapshot()               = isoUri.first()
     suspend fun getIsoArchSnapshot()              = isoArch.first()
+    suspend fun getBootModeSnapshot()             = bootMode.first()
+    suspend fun getCustomImageUriSnapshot()       = customImageUri.first()
 }
