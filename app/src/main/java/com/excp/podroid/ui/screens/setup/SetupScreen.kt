@@ -405,7 +405,16 @@ private fun IsoSelectionPage(
         PodroidSectionLabel(stringResource(R.string.pick_iso_label))
         PodroidPrimaryButton(
             text = if (selectedUri.isEmpty()) stringResource(R.string.pick_iso_label) else selectedUri.substringAfterLast("/"),
-            onClick = { launcher.launch(arrayOf("application/x-iso9660-image", "application/octet-stream")) }
+            onClick = {
+                launcher.launch(
+                    arrayOf(
+                        "application/x-iso9660-image",
+                        "application/octet-stream",
+                        "application/x-cd-image",
+                        "application/x-raw-disk-image"
+                    )
+                )
+            }
         )
         if (selectedUri.isEmpty()) {
             Text(

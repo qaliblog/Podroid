@@ -256,17 +256,27 @@ class QemuEngine @Inject constructor(
         }
 
         val qemuExe = qemuExecutable(config) ?: run {
+            val nativeDir = context.applicationInfo.nativeLibraryDir
+            val files = File(nativeDir).listFiles()?.joinToString { it.name } ?: "(empty)"
+            Log.e(TAG, "QEMU binary not found in $nativeDir. Available files: $files")
             // The startMutex block already set cleanedUp=false and bootStartTime;
             // restore the "cleanedUp=false ⟺ a VM lifetime is in progress"
             // invariant on this early-error return, matching the other error
             // paths (which run cleanup()). No process/scope exists yet.
             cleanedUp.set(true)
             bootStartTime = 0L
-            _state.value = VmState.Error("QEMU binary not found.")
+            _state.value = VmState.Error("QEMU binary not found. Please reinstall the app.")
             return
         }
 
-        ensureStorageImage(config.storageSizeGb)
+        try {
+            ensureStorageImage(config.storageSizeGb)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to ensure storage image", e)
+            _state.value = VmState.Error("Failed to initialize storage: ${e.message}")
+            cleanup()
+            return
+        }
 
         _consoleText.value = ""
         _bootStage.value = "Starting QEMU..."
@@ -283,6 +293,28 @@ class QemuEngine @Inject constructor(
         File(ctrlSockPath).delete()
         File(qmpSocketPath).delete()
         File(hostSockPath).delete()
+
+        val isIso = !config.isoUri.isNullOrEmpty()
+        if (isIso && config.isoUri != null) {
+            _bootStage.value = "Preparing boot image..."
+            try {
+                val uri = Uri.parse(config.isoUri)
+                val destFile = File(context.filesDir, "boot.iso")
+                // Copy the user-selected ISO to app internal storage. On Android 15
+                // (API 35), SELinux often blocks child processes (QEMU) from
+                // opening FDs passed from the parent app via /proc/self/fd/N
+                // or /dev/fd/N. Localizing the file bypasses this barrier.
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    destFile.outputStream().use { output -> input.copyTo(output) }
+                } ?: throw java.io.IOException("Failed to open ISO input stream")
+                Log.i(TAG, "ISO localized to internal storage: ${destFile.length()} bytes")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to localize ISO", e)
+                _state.value = VmState.Error("Failed to prepare boot image: ${e.message}")
+                cleanup()
+                return
+            }
+        }
 
         try {
             val cmd = buildCommand(qemuExe, portForwards, config)
@@ -394,7 +426,15 @@ class QemuEngine @Inject constructor(
             _state.value = when {
                 priorError != null -> priorError
                 exitCode == 0 -> VmState.Stopped
-                else -> VmState.Error(formatExitError(exitCode, config.storageAccessEnabled))
+                else -> {
+                    val msg = formatExitError(exitCode, config.storageAccessEnabled)
+                    val lastErr = synchronized(stderrTail) { stderrTail.lastOrNull() }
+                    if (lastErr != null) {
+                        VmState.Error("$msg\n\nQEMU stderr:\n$lastErr")
+                    } else {
+                        VmState.Error(msg)
+                    }
+                }
             }
         } catch (e: CancellationException) {
             // The start() coroutine lives in PodroidService.serviceScope, which
@@ -479,6 +519,7 @@ class QemuEngine @Inject constructor(
         File(serialSockPath).delete()
         File(terminalSockPath).delete()
         File(ctrlSockPath).delete()
+        File(context.filesDir, "boot.iso").delete()
         _bootStage.value = ""
     }
 
@@ -493,18 +534,36 @@ class QemuEngine @Inject constructor(
         val isX86 = config.isoArch == "x86_64"
         val isIso = !config.isoUri.isNullOrEmpty()
 
+        /*
+         * Note on branch differences:
+         *
+         * The 'main' branch of Podroid uses direct kernel booting for its
+         * built-in Alpine VM, passing:
+         *   -kernel vmlinuz-virt
+         *   -initrd initrd.img
+         *   -append "console=ttyAMA0 ..."
+         *
+         * This branch maintains that fallback for the built-in VM (see below).
+         * For custom ISO/IMG booting, QEMU uses the ISO's own bootloader.
+         * On aarch64, this typically requires UEFI firmware (QEMU_EFI.fd),
+         * which is currently a limitation for generic aarch64 ISOs.
+         */
+
         if (isX86) {
             args += "-M"; args += "q35"
             args += "-cpu"; args += "max"
         } else {
             args += "-M"; args += "virt,gic-version=3"
-            // pauth-impdef swaps QEMU's slow QARMA5 PAuth for a fast non-crypto impl (≤50% TCG win on aarch64-on-aarch64).
-            args += "-cpu"; args += "max,pauth-impdef=on"
+            // sve=off: expensive to TCG-translate and rarely used in VMs; pauth-impdef: fast non-crypto PAuth (≤50% TCG win).
+            args += "-cpu"; args += "max,sve=off,pauth-impdef=on"
         }
 
         val tbSizeMb = if (config.ramMb >= 2048) 512 else 256
         // thread=multi: one host thread per vCPU; larger tb-size reduces re-translation for JIT-heavy guests.
         args += "-accel"; args += "tcg,thread=multi,tb-size=$tbSizeMb"
+        // Search path for firmware (SeaBIOS/VGABIOS) and keymaps — points to the internal filesDir
+        // where assets are extracted. Matches the directory structure of the 'share/qemu' install.
+        args += "-L";    args += context.filesDir.absolutePath
         args += "-smp"; args += "${config.cpus}"
         args += "-m";   args += "${config.ramMb}"
 
@@ -537,14 +596,11 @@ class QemuEngine @Inject constructor(
         }
 
         if (isIso && config.isoUri != null) {
-            try {
-                val uri = Uri.parse(config.isoUri)
-                val pfd = context.contentResolver.openFileDescriptor(uri, "r")
-                if (pfd != null) {
-                    args += "-cdrom"; args += "/dev/fd/${pfd.detachFd()}"
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to open ISO URI: ${config.isoUri}", e)
+            val destFile = File(context.filesDir, "boot.iso")
+            if (destFile.exists()) {
+                args += "-cdrom"; args += destFile.absolutePath
+            } else {
+                Log.e(TAG, "Localized ISO not found at ${destFile.absolutePath}")
             }
         }
 
@@ -632,7 +688,17 @@ class QemuEngine @Inject constructor(
 
         // User extras appended last so later -cpu / -accel overrides earlier ones.
         if (userQemuExtras.isNotEmpty()) {
-            args += userQemuExtras.split(Regex("\\s+"))
+            var extras = userQemuExtras
+            if (isX86) {
+                // Safeguard: remove AArch64-only flags (often left in user settings from defaults) to prevent x86_64 crash.
+                // Property 'max-x86_64-cpu.sve' not found.
+                extras = extras.replace(Regex(",?\\s*sve=off"), "")
+                               .replace(Regex(",?\\s*pauth-impdef=on"), "")
+                               .trim()
+            }
+            if (extras.isNotEmpty()) {
+                args += extras.split(Regex("\\s+")).filter { it.isNotBlank() }
+            }
         }
 
         // Wrap QEMU in podroid-launcher when available — it sets PR_SET_PDEATHSIG
