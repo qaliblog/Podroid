@@ -336,9 +336,10 @@ class QemuEngine @Inject constructor(
             }.asCoroutineDispatcher()
             qemuDispatcher = dispatcher
 
+            Log.i(TAG, "Executing: ${cmd.joinToString(" ")}")
             val proc = withContext(dispatcher) { pb.start() }
             process = proc
-            _bootStage.value = "Booting kernel..."
+            _bootStage.value = "Booting..."
 
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
             ioScope = scope
