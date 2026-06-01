@@ -8,6 +8,7 @@ package com.excp.podroid.ui.screens.settings
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.util.Log
 import androidx.core.content.FileProvider
@@ -25,6 +26,7 @@ import com.excp.podroid.util.NetworkUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -62,6 +64,7 @@ data class SettingsUiState(
     val bootMode: com.excp.podroid.engine.BootMode = com.excp.podroid.engine.BootMode.BUILTIN,
     val customImageUri: String = "",
     val isoArch: String = "aarch64",
+    val primaryConsole: com.excp.podroid.engine.ConsoleMode = com.excp.podroid.engine.ConsoleMode.VIRTIO,
 )
 
 @HiltViewModel
@@ -93,54 +96,40 @@ class SettingsViewModel @Inject constructor(
      * combined object on every emit.
      */
     val uiState: StateFlow<SettingsUiState> = combine(
-        combine(
-            settingsRepository.vmRamMb,
-            settingsRepository.vmCpus,
-            settingsRepository.storageSizeGb,
-            settingsRepository.sshEnabled,
-        ) { ram, cpus, storage, ssh ->
-            arrayOf(ram, cpus, storage, ssh)
-        },
-        combine(
-            settingsRepository.storageAccessEnabled,
-            settingsRepository.qemuExtraArgs,
-            settingsRepository.kernelExtraCmdline,
-            settingsRepository.darkTheme,
-            settingsRepository.dynamicColorEnabled,
-        ) { storageAccess, qemu, kernel, dark, dyn ->
-            arrayOf(storageAccess, qemu, kernel, dark, dyn)
-        },
-        combine(
-            combine(
-                settingsRepository.engineSelection,
-                settingsRepository.language,
-                languageManager.language,
-                settingsRepository.bootMode,
-            ) { engineSel, lang, sysLang, bootMode ->
-                arrayOf(engineSel, lang, sysLang, bootMode)
-            },
-            settingsRepository.customImageUri,
-            settingsRepository.isoArch,
-        ) { c1, customUri, arch ->
-            arrayOf(c1[0], c1[1], c1[2], c1[3], customUri, arch)
-        }
-    ) { a, b, c ->
+        settingsRepository.vmRamMb,
+        settingsRepository.vmCpus,
+        settingsRepository.storageSizeGb,
+        settingsRepository.sshEnabled,
+        settingsRepository.storageAccessEnabled,
+        settingsRepository.qemuExtraArgs,
+        settingsRepository.kernelExtraCmdline,
+        settingsRepository.darkTheme,
+        settingsRepository.dynamicColorEnabled,
+        settingsRepository.engineSelection,
+        settingsRepository.language,
+        languageManager.language,
+        settingsRepository.bootMode,
+        settingsRepository.customImageUri,
+        settingsRepository.isoArch,
+        settingsRepository.primaryConsole,
+    ) { args ->
         SettingsUiState(
-            vmRamMb = a[0] as Int,
-            vmCpus = a[1] as Int,
-            storageSizeGb = a[2] as Int,
-            sshEnabled = a[3] as Boolean,
-            storageAccessEnabled = b[0] as Boolean,
-            qemuExtraArgs = b[1] as String,
-            kernelExtraCmdline = b[2] as String,
-            darkTheme = b[3] as Boolean,
-            dynamicColorEnabled = b[4] as Boolean,
-            engineSelection = c[0] as EngineSelection,
-            language = c[1] as String,
-            systemDefaultLanguage = c[2] as String,
-            bootMode = c[3] as com.excp.podroid.engine.BootMode,
-            customImageUri = c[4] as String,
-            isoArch = c[5] as String,
+            vmRamMb = args[0] as Int,
+            vmCpus = args[1] as Int,
+            storageSizeGb = args[2] as Int,
+            sshEnabled = args[3] as Boolean,
+            storageAccessEnabled = args[4] as Boolean,
+            qemuExtraArgs = args[5] as String,
+            kernelExtraCmdline = args[6] as String,
+            darkTheme = args[7] as Boolean,
+            dynamicColorEnabled = args[8] as Boolean,
+            engineSelection = args[9] as EngineSelection,
+            language = args[10] as String,
+            systemDefaultLanguage = args[11] as String,
+            bootMode = args[12] as com.excp.podroid.engine.BootMode,
+            customImageUri = args[13] as String,
+            isoArch = args[14] as String,
+            primaryConsole = args[15] as com.excp.podroid.engine.ConsoleMode,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsUiState())
 
@@ -176,6 +165,9 @@ class SettingsViewModel @Inject constructor(
 
     val vmState: StateFlow<VmState> = engine.state
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), VmState.Idle)
+
+    private val _bootStage = MutableStateFlow("")
+    val bootStage: StateFlow<String> = _bootStage.asStateFlow()
 
     fun setDarkTheme(value: Boolean) {
         viewModelScope.launch { settingsRepository.setDarkTheme(value) }
@@ -227,6 +219,35 @@ class SettingsViewModel @Inject constructor(
 
     fun setIsoArch(value: String) {
         viewModelScope.launch { settingsRepository.setIsoArch(value) }
+    }
+
+    fun setPrimaryConsole(value: com.excp.podroid.engine.ConsoleMode) {
+        viewModelScope.launch { settingsRepository.setPrimaryConsole(value) }
+    }
+
+    /**
+     * Import a user-selected disk image (e.g. Cloud Image) into storage.img.
+     * This makes it the primary persistent disk for STORAGE boot mode.
+     */
+    fun importImageToStorage(uri: Uri): Job = viewModelScope.launch(Dispatchers.IO) {
+        try {
+            _bootStage.value = "Importing disk image..."
+            val storageFile = File(context.filesDir, "storage.img")
+
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                storageFile.outputStream().use { output ->
+                    input.copyTo(output)
+                    output.flush()
+                }
+            } ?: throw java.io.IOException("Failed to open input stream for $uri")
+
+            Log.i(TAG, "Successfully imported image to storage.img (${storageFile.length()} bytes)")
+            _bootStage.value = "Import successful"
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to import image", e)
+            _exportError.value = "Import failed: ${e.message}"
+            _bootStage.value = "Import failed"
+        }
     }
 
     fun setTerminalFontSize(value: Int) {

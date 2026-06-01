@@ -229,6 +229,9 @@ fun SettingsScreen(
                     currentMb = ui.vmRamMb,
                     onChange = viewModel::setVmRamMb,
                     enabled = vmNotRunning,
+                    ui = ui,
+                    vmNotRunning = vmNotRunning,
+                    viewModel = viewModel
                 )
                 CpusSection(
                     currentCpus = ui.vmCpus,
@@ -247,6 +250,7 @@ fun SettingsScreen(
                     onUriChange = { viewModel.setCustomImageUri(it) },
                     onArchChange = { viewModel.setIsoArch(it) },
                     vmNotRunning = vmNotRunning,
+                    viewModel = viewModel
                 )
 
                 // ── NETWORK ───────────────────────────────────────────
@@ -503,7 +507,7 @@ fun SettingsScreen(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun RamSection(currentMb: Int, onChange: (Int) -> Unit, enabled: Boolean) {
+private fun RamSection(currentMb: Int, onChange: (Int) -> Unit, enabled: Boolean, ui: SettingsUiState, vmNotRunning: Boolean, viewModel: SettingsViewModel) {
     Column(modifier = Modifier.padding(bottom = PodroidTokens.Spacing.SM)) {
         Text(
             "${stringResource(R.string.ram_label)}  ·  ${if (currentMb >= 1024) "${currentMb / 1024} GB" else "$currentMb MB"}",
@@ -530,6 +534,35 @@ private fun RamSection(currentMb: Int, onChange: (Int) -> Unit, enabled: Boolean
                 )
             }
         }
+
+        Text(
+            "Primary Console",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(
+                top = PodroidTokens.Spacing.MD,
+                bottom = PodroidTokens.Spacing.SM,
+            ),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            com.excp.podroid.engine.ConsoleMode.entries.forEach { mode ->
+                FilterChip(
+                    selected = ui.primaryConsole == mode,
+                    enabled = vmNotRunning,
+                    onClick = { viewModel.setPrimaryConsole(mode) },
+                    label = {
+                        Text(
+                            when (mode) {
+                                com.excp.podroid.engine.ConsoleMode.SERIAL -> "Serial (ttyS0/AMA0)"
+                                com.excp.podroid.engine.ConsoleMode.VIRTIO -> "Virtio-Console (hvc0)"
+                            }
+                        )
+                    },
+                    shape = RoundedCornerShape(PodroidTokens.Radius.Chip),
+                    colors = PodroidChipColors(),
+                )
+            }
+        }
         HorizontalDivider(
             color = MaterialTheme.colorScheme.outline,
             thickness = 1.dp,
@@ -548,6 +581,7 @@ private fun BootModeSection(
     onUriChange: (String) -> Unit,
     onArchChange: (String) -> Unit,
     vmNotRunning: Boolean,
+    viewModel: SettingsViewModel,
 ) {
     val context = LocalContext.current
     val launcher = rememberLauncherForActivityResult(
@@ -585,7 +619,7 @@ private fun BootModeSection(
                             when (mode) {
                                 com.excp.podroid.engine.BootMode.BUILTIN -> stringResource(R.string.boot_mode_builtin)
                                 com.excp.podroid.engine.BootMode.ISO -> stringResource(R.string.boot_mode_iso)
-                                com.excp.podroid.engine.BootMode.DISK -> stringResource(R.string.boot_mode_disk)
+                                com.excp.podroid.engine.BootMode.STORAGE -> stringResource(R.string.boot_mode_disk)
                             }
                         )
                     },
@@ -595,7 +629,7 @@ private fun BootModeSection(
             }
         }
 
-        if (bootMode != com.excp.podroid.engine.BootMode.BUILTIN) {
+        if (bootMode == com.excp.podroid.engine.BootMode.ISO) {
             PodroidListRow(
                 label = stringResource(R.string.pick_iso_label),
                 value = customUri.substringAfterLast("/").ifEmpty { stringResource(R.string.none) },
@@ -610,6 +644,39 @@ private fun BootModeSection(
                     )
                 },
             )
+        }
+
+        if (bootMode == com.excp.podroid.engine.BootMode.STORAGE) {
+            val importLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.OpenDocument(),
+                onResult = { uri ->
+                    uri?.let {
+                        onUriChange(it.toString())
+                    }
+                }
+            )
+
+            PodroidListRow(
+                label = stringResource(R.string.boot_mode_disk),
+                value = customUri.substringAfterLast("/").ifEmpty { stringResource(R.string.none) },
+                onClick = {
+                    importLauncher.launch(
+                        arrayOf(
+                            "application/octet-stream",
+                            "application/x-raw-disk-image"
+                        )
+                    )
+                },
+            )
+
+            if (customUri.isNotEmpty()) {
+                com.excp.podroid.ui.components.PodroidPrimaryButton(
+                    text = "Import to Storage",
+                    onClick = {
+                        viewModel.importImageToStorage(Uri.parse(customUri))
+                    },
+                )
+            }
         }
 
         Text(

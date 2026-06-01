@@ -614,31 +614,16 @@ class QemuEngine @Inject constructor(
             }
         }
 
-        if (bootMode == BootMode.DISK) {
-            val destFile = File(context.filesDir, "boot.img")
-            if (destFile.exists()) {
-                args += "-object"; args += "iothread,id=iothread_boot"
-                args += "-device"; args += "virtio-blk-pci,drive=drive_boot,num-queues=${config.cpus},iothread=iothread_boot"
-                args += "-drive";  args += "file=${destFile.absolutePath},if=none,id=drive_boot,format=raw,cache=writeback,aio=threads"
-            } else {
-                Log.e(TAG, "Localized DISK image not found at ${destFile.absolutePath}")
-            }
-        }
-
         val storagePath = File(context.filesDir, "storage.img")
         if (storagePath.exists()) {
-            // Single dedicated iothread for the writable disk. Multi-iothread
-            // fan-out via `iothread-vq-mapping` requires `-device <full-json>`
-            // form (the keyval parser cannot supply array-typed properties),
-            // and on TCG-emulated guests the perf win is marginal vs the
-            // refactor cost. Stick with one iothread, num-queues==vCPUs.
+            // Single dedicated iothread for the primary writable disk.
             args += "-object"; args += "iothread,id=iothread0"
-            args += "-device"; args += "virtio-blk-pci,drive=drive1,num-queues=${config.cpus},iothread=iothread0"
+
+            val bootIndex = if (bootMode == BootMode.STORAGE) ",bootindex=1" else ""
+            args += "-device"; args += "virtio-blk-pci,drive=drive1,num-queues=${config.cpus},iothread=iothread0$bootIndex"
+
             // discard=unmap + detect-zeroes=unmap: as the guest fstrim's the
-            // overlay, hand the punched holes back to the host filesystem so
-            // storage.img stops growing unbounded after long-term container
-            // churn. detect-zeroes converts all-zero writes (e.g. mkfs.ext4's
-            // erasure pass) into discards too.
+            // overlay, hand the punched holes back to the host filesystem.
             args += "-drive";  args += "file=${storagePath.absolutePath},if=none,id=drive1,format=raw,cache=writeback,aio=threads,discard=unmap,detect-zeroes=unmap"
         }
 
@@ -691,18 +676,14 @@ class QemuEngine @Inject constructor(
         }
 
         // ── Serial (ttyAMA0 / ttyS0) ──────────────────────────────────────────
-        // Generic images typically use serial for their console. For custom boots, map
-        // the serial port to terminal.sock (where the interactive bridge connects)
-        // so the terminal isn't empty.
-        val isCustomBoot = bootMode != BootMode.BUILTIN
-        val serialPath = if (isCustomBoot) terminalSockPath else serialSockPath
+        // Some images use serial for their console, others use virtio-console.
+        val isSerialPrimary = config.primaryConsole == ConsoleMode.SERIAL
+        val serialPath = if (isSerialPrimary) terminalSockPath else serialSockPath
         args += "-serial"; args += "unix:$serialPath,server,nowait"
 
         // ── virtio-console bus ────────────────────────────────────────────────
         // hvc0 = primary terminal (getty runs here; bridge connects to terminal.sock).
-        // For custom boots, move hvc0 to serial.sock so the boot log monitor can still
-        // capture any early virtio output if the guest uses it.
-        val hvc0Path = if (isCustomBoot) serialSockPath else terminalSockPath
+        val hvc0Path = if (isSerialPrimary) serialSockPath else terminalSockPath
         args += "-device";  args += "virtio-serial-pci"
         args += "-chardev"; args += "socket,id=term0,path=$hvc0Path,server=on,wait=off"
         args += "-device";  args += "virtconsole,chardev=term0,name=org.podroid.term"

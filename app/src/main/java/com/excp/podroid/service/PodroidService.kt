@@ -342,6 +342,7 @@ class PodroidService : Service() {
                         x11Dpi = settingsRepository.getX11DpiSnapshot(),
                         usbPassthroughEnabled = settingsRepository.getUsbPassthroughEnabledSnapshot(),
                         bootMode = settingsRepository.getBootModeSnapshot(),
+                        primaryConsole = settingsRepository.getPrimaryConsoleSnapshot(),
                         customImageUri = settingsRepository.getCustomImageUriSnapshot(),
                         isoUri = settingsRepository.getIsoUriSnapshot(),
                         isoArch = settingsRepository.getIsoArchSnapshot(),

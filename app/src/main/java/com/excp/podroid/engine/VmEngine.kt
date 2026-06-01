@@ -80,9 +80,14 @@ interface VmEngine {
  * so existing call sites don't change.
  */
 enum class BootMode {
-    BUILTIN, // Alpine built-in
-    ISO,     // Boot from ISO (CD-ROM)
-    DISK     // Boot from custom disk image (Cloud Image / installed OS)
+    BUILTIN, // Alpine built-in (kernel/initrd + squashfs + storage.img as overlay)
+    ISO,     // Boot from ISO (CD-ROM) + storage.img as writable disk
+    STORAGE  // Boot directly from storage.img (Cloud Image or installed OS)
+}
+
+enum class ConsoleMode {
+    SERIAL, // Primary interactive console on Serial (ttyS0 / ttyAMA0)
+    VIRTIO  // Primary interactive console on Virtio-Console (hvc0)
 }
 
 data class VmConfig(
@@ -98,6 +103,7 @@ data class VmConfig(
     val x11Dpi: Int = 96,
     val usbPassthroughEnabled: Boolean = false,
     val bootMode: BootMode = BootMode.BUILTIN,
+    val primaryConsole: ConsoleMode = ConsoleMode.VIRTIO,
     val customImageUri: String? = null,
     val isoUri: String? = null, // Kept for backward compat / specific ISO logic
     val isoArch: String = "aarch64",

@@ -423,7 +423,7 @@ private fun IsoSelectionPage(
                             when (mode) {
                                 com.excp.podroid.engine.BootMode.BUILTIN -> stringResource(R.string.boot_mode_builtin)
                                 com.excp.podroid.engine.BootMode.ISO -> stringResource(R.string.boot_mode_iso)
-                                com.excp.podroid.engine.BootMode.DISK -> stringResource(R.string.boot_mode_disk)
+                                com.excp.podroid.engine.BootMode.STORAGE -> stringResource(R.string.boot_mode_disk)
                             }
                         )
                     },

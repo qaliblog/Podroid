@@ -57,6 +57,7 @@ class SettingsRepository @Inject constructor(
         val KEY_ISO_ARCH                = stringPreferencesKey("iso_arch")
         val KEY_BOOT_MODE               = stringPreferencesKey("boot_mode")
         val KEY_CUSTOM_IMAGE_URI        = stringPreferencesKey("custom_image_uri")
+        val KEY_PRIMARY_CONSOLE         = stringPreferencesKey("primary_console")
 
         val KEY_X11_RES_MODE        = stringPreferencesKey("x11_resolution_mode")
         val KEY_X11_RES_PRESET      = stringPreferencesKey("x11_resolution_preset")
@@ -143,6 +144,12 @@ class SettingsRepository @Inject constructor(
                 .getOrDefault(com.excp.podroid.engine.BootMode.BUILTIN)
         }
     val customImageUri       = pref(KEY_CUSTOM_IMAGE_URI, "")
+    val primaryConsole: Flow<com.excp.podroid.engine.ConsoleMode> = context.dataStore.data
+        .catch { e -> if (e is IOException) emit(androidx.datastore.preferences.core.emptyPreferences()) else throw e }
+        .map { prefs ->
+            runCatching { com.excp.podroid.engine.ConsoleMode.valueOf(prefs[KEY_PRIMARY_CONSOLE] ?: "VIRTIO") }
+                .getOrDefault(com.excp.podroid.engine.ConsoleMode.VIRTIO)
+        }
     val avfVerboseLogging: Flow<Boolean> = context.dataStore.data
         .catch { e -> if (e is IOException) emit(androidx.datastore.preferences.core.emptyPreferences()) else throw e }
         .map { prefs -> prefs[KEY_AVF_VERBOSE_LOGGING] ?: false }
@@ -178,6 +185,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setIsoArch(value: String)                = set(KEY_ISO_ARCH, value)
     suspend fun setBootMode(value: com.excp.podroid.engine.BootMode) = set(KEY_BOOT_MODE, value.name)
     suspend fun setCustomImageUri(value: String)         = set(KEY_CUSTOM_IMAGE_URI, value)
+    suspend fun setPrimaryConsole(value: com.excp.podroid.engine.ConsoleMode) = set(KEY_PRIMARY_CONSOLE, value.name)
 
     val x11Settings: kotlinx.coroutines.flow.Flow<com.excp.podroid.x11.X11Settings> = context.dataStore.data
         .catch { e -> if (e is IOException) emit(androidx.datastore.preferences.core.emptyPreferences()) else throw e }
@@ -230,4 +238,5 @@ class SettingsRepository @Inject constructor(
     suspend fun getIsoArchSnapshot()              = isoArch.first()
     suspend fun getBootModeSnapshot()             = bootMode.first()
     suspend fun getCustomImageUriSnapshot()       = customImageUri.first()
+    suspend fun getPrimaryConsoleSnapshot()       = primaryConsole.first()
 }
