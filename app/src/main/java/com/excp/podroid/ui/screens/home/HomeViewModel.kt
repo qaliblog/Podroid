@@ -167,7 +167,6 @@ class HomeViewModel @Inject constructor(
         get() = engine.runningSinceMs ?: fallbackRunningSinceMs
 
     init {
-        checkForUpdate()
         // Maintain fallbackRunningSinceMs for engines that don't override runningSinceMs.
         viewModelScope.launch {
             var lastWasRunning = false
@@ -197,16 +196,6 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun checkForUpdate() {
-        viewModelScope.launch {
-            try {
-                val info = updateRepository.checkForUpdate(BuildConfig.VERSION_NAME) ?: return@launch
-                if (!updateRepository.isDismissed(info.latestVersion)) {
-                    _updateInfo.value = info
-                }
-            } catch (_: Exception) { }
-        }
-    }
 
     fun dismissUpdate() {
         val version = _updateInfo.value?.latestVersion ?: return

@@ -116,6 +116,7 @@ class UpdateRepository @Inject constructor(
     private val cacheValidityMs = 24 * 60 * 60 * 1000L
 
     suspend fun checkForUpdate(currentVersion: String): UpdateInfo? = withContext(Dispatchers.IO) {
+        return@withContext null
         // Wall-clock time so the 24h gate survives device reboots and deep sleep.
         val now = System.currentTimeMillis()
         var connection: java.net.HttpURLConnection? = null
