@@ -571,11 +571,12 @@ class QemuEngine @Inject constructor(
         // UEFI firmware support for generic boots
         if (bootMode != BootMode.BUILTIN) {
             val firmwareName = if (isX86) "OVMF.fd" else "QEMU_EFI.fd"
+            // QEMU assets are extracted to the root of filesDir (see PodroidApplication.copyAssetDir)
             val firmwareFile = File(context.filesDir, firmwareName)
             if (firmwareFile.exists()) {
                 args += "-bios"; args += firmwareFile.absolutePath
             } else {
-                Log.w(TAG, "UEFI firmware $firmwareName not found, generic boot may fail.")
+                Log.w(TAG, "UEFI firmware $firmwareName not found at ${firmwareFile.absolutePath}, generic boot may fail.")
             }
         }
 
@@ -587,8 +588,14 @@ class QemuEngine @Inject constructor(
                 args += "-kernel"; args += kernelPath.absolutePath
                 val cmdline = buildString {
                     // mitigations=off: speculative-exec attacks don't cross the TCG ISA boundary; 5–15% gain.
+                    // console=ttyAMA0: kernel log always goes to the serial port (captured by QemuBootMonitor).
+                    // podroid.tty: tells our Alpine image which TTY to run the interactive getty on.
                     append("console=ttyAMA0 mitigations=off")
                     if (userKernelExtras.isNotEmpty()) append(" ").append(userKernelExtras)
+                    val tty = if (config.primaryConsole == ConsoleMode.SERIAL) {
+                        if (isX86) "ttyS0" else "ttyAMA0"
+                    } else "hvc0"
+                    append(" podroid.tty=").append(tty)
                     append(" androidip=").append(config.androidIp)
                     if (config.sshEnabled) append(" ssh=1")
                     append(" podroid.x11.dpi=").append(config.x11Dpi)

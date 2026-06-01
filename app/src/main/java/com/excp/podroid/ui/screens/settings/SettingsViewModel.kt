@@ -210,7 +210,17 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setBootMode(value: com.excp.podroid.engine.BootMode) {
-        viewModelScope.launch { settingsRepository.setBootMode(value) }
+        viewModelScope.launch {
+            settingsRepository.setBootMode(value)
+            // Auto-switch primary console to match common usage for the mode.
+            // Built-in Alpine uses virtio-console (hvc0); generic ISOs/images
+            // almost always use serial (ttyS0 / ttyAMA0).
+            val mode = when (value) {
+                com.excp.podroid.engine.BootMode.BUILTIN -> com.excp.podroid.engine.ConsoleMode.VIRTIO
+                else -> com.excp.podroid.engine.ConsoleMode.SERIAL
+            }
+            settingsRepository.setPrimaryConsole(mode)
+        }
     }
 
     fun setCustomImageUri(value: String) {

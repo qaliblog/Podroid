@@ -212,6 +212,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget curl unzip xz-utils ca-certificates git bzip2 ninja-build python3 python3-pip \
     pkg-config flex bison make cmake autoconf automake libtool libglib2.0-dev \
     libglib2.0-bin gettext libintl-perl binutils-aarch64-linux-gnu patchelf \
+    ovmf qemu-efi-aarch64 \
     && rm -rf /var/lib/apt/lists/*
 RUN pip3 install --break-system-packages meson 2>/dev/null || pip3 install meson
 
@@ -298,6 +299,10 @@ RUN ${CC} --sysroot=${LLVM}/sysroot -target aarch64-linux-android28 -fPIE -pie -
 # Launcher (PR_SET_PDEATHSIG wrapper for QEMU — see podroid-launcher.c)
 COPY podroid-launcher.c /tmp/podroid-launcher.c
 RUN ${CC} --sysroot=${LLVM}/sysroot -target aarch64-linux-android28 -fPIE -pie -Wl,-z,max-page-size=16384 /tmp/podroid-launcher.c -o /opt/qemu-out/libpodroid-launcher.so
+
+# UEFI Firmware
+RUN cp /usr/share/OVMF/OVMF_CODE.fd /opt/qemu-out/share/qemu/OVMF.fd \
+    && cp /usr/share/qemu-efi-aarch64/QEMU_EFI.fd /opt/qemu-out/share/qemu/QEMU_EFI.fd
 
 # Soname fix
 RUN cp /opt/qemu-out/bin/qemu-system-aarch64 /opt/qemu-out/libqemu-system-aarch64.so \
