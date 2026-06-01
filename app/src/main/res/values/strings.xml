@@ -125,10 +125,14 @@
     <string name="iso_selection_title">Custom ISO or Disk Image (Optional)</string>
     <string name="iso_selection_description">Pick an ISO or IMG file to boot a different OS. If unselected, Podroid boots its built-in Alpine Linux.</string>
     <string name="pick_iso_label">Pick ISO or IMG file</string>
-    <string name="no_iso_selected">No ISO or IMG selected</string>
+    <string name="no_iso_selected">No image selected</string>
     <string name="iso_arch_label">Guest Architecture</string>
     <string name="aarch64">aarch64</string>
     <string name="x86_64">x86_64</string>
+    <string name="boot_source_label">Boot Source</string>
+    <string name="boot_mode_builtin">Built-in (Alpine)</string>
+    <string name="boot_mode_iso">ISO (Install CD)</string>
+    <string name="boot_mode_disk">Disk Image (Cloud / OS)</string>
 
     <!-- Dialogs -->
     <string name="update_available">Update available</string>

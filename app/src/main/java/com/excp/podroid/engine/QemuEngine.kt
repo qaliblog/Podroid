@@ -294,22 +294,25 @@ class QemuEngine @Inject constructor(
         File(qmpSocketPath).delete()
         File(hostSockPath).delete()
 
-        val isIso = !config.isoUri.isNullOrEmpty()
-        if (isIso && config.isoUri != null) {
+        val bootMode = config.bootMode
+        val customUri = config.customImageUri ?: config.isoUri
+        if (bootMode != BootMode.BUILTIN && !customUri.isNullOrEmpty()) {
             _bootStage.value = "Preparing boot image..."
             try {
-                val uri = Uri.parse(config.isoUri)
-                val destFile = File(context.filesDir, "boot.iso")
-                // Copy the user-selected ISO to app internal storage. On Android 15
+                val uri = Uri.parse(customUri)
+                val isIso = bootMode == BootMode.ISO
+                val destFile = File(context.filesDir, if (isIso) "boot.iso" else "boot.img")
+
+                // Copy the user-selected image to app internal storage. On Android 15
                 // (API 35), SELinux often blocks child processes (QEMU) from
                 // opening FDs passed from the parent app via /proc/self/fd/N
                 // or /dev/fd/N. Localizing the file bypasses this barrier.
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     destFile.outputStream().use { output -> input.copyTo(output) }
-                } ?: throw java.io.IOException("Failed to open ISO input stream")
-                Log.i(TAG, "ISO localized to internal storage: ${destFile.length()} bytes")
+                } ?: throw java.io.IOException("Failed to open image input stream")
+                Log.i(TAG, "Image localized to internal storage: ${destFile.length()} bytes")
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to localize ISO", e)
+                Log.e(TAG, "Failed to localize image", e)
                 _state.value = VmState.Error("Failed to prepare boot image: ${e.message}")
                 cleanup()
                 return
@@ -333,9 +336,10 @@ class QemuEngine @Inject constructor(
             }.asCoroutineDispatcher()
             qemuDispatcher = dispatcher
 
+            Log.i(TAG, "Executing: ${cmd.joinToString(" ")}")
             val proc = withContext(dispatcher) { pb.start() }
             process = proc
-            _bootStage.value = "Booting kernel..."
+            _bootStage.value = "Booting..."
 
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
             ioScope = scope
@@ -380,8 +384,8 @@ class QemuEngine @Inject constructor(
                     Log.d(TAG, "QEMU sockets ready after ${System.currentTimeMillis() - startMs}ms")
                     socketsReady = true
 
-                    if (isIso) {
-                        // Generic ISOs don't emit the "Ready!" marker. Promote to Running
+                    if (bootMode != BootMode.BUILTIN) {
+                        // Generic images don't emit the "Ready!" marker. Promote to Running
                         // immediately so the terminal can be opened.
                         _bootStage.value = "Ready"
                         persistBootDuration()
@@ -531,6 +535,7 @@ class QemuEngine @Inject constructor(
         File(terminalSockPath).delete()
         File(ctrlSockPath).delete()
         File(context.filesDir, "boot.iso").delete()
+        File(context.filesDir, "boot.img").delete()
         _bootStage.value = ""
     }
 
@@ -543,22 +548,7 @@ class QemuEngine @Inject constructor(
         val userQemuExtras = config.qemuExtraArgs.trim()
         val userKernelExtras = config.kernelExtraCmdline.trim()
         val isX86 = config.isoArch == "x86_64"
-        val isIso = !config.isoUri.isNullOrEmpty()
-
-        /*
-         * Note on branch differences:
-         *
-         * The 'main' branch of Podroid uses direct kernel booting for its
-         * built-in Alpine VM, passing:
-         *   -kernel vmlinuz-virt
-         *   -initrd initrd.img
-         *   -append "console=ttyAMA0 ..."
-         *
-         * This branch maintains that fallback for the built-in VM (see below).
-         * For custom ISO/IMG booting, QEMU uses the ISO's own bootloader.
-         * On aarch64, this typically requires UEFI firmware (QEMU_EFI.fd),
-         * which is currently a limitation for generic aarch64 ISOs.
-         */
+        val bootMode = config.bootMode
 
         if (isX86) {
             args += "-M"; args += "q35"
@@ -578,9 +568,18 @@ class QemuEngine @Inject constructor(
         args += "-smp"; args += "${config.cpus}"
         args += "-m";   args += "${config.ramMb}"
 
-        // Only use default kernel/initrd if we are NOT booting from an ISO
-        // or if we are aarch64 (custom kernel is aarch64 only).
-        if (!isIso && !isX86) {
+        // UEFI firmware support for generic boots
+        if (bootMode != BootMode.BUILTIN) {
+            val firmwareName = if (isX86) "OVMF.fd" else "QEMU_EFI.fd"
+            val firmwareFile = File(context.filesDir, firmwareName)
+            if (firmwareFile.exists()) {
+                args += "-bios"; args += firmwareFile.absolutePath
+            } else {
+                Log.w(TAG, "UEFI firmware $firmwareName not found, generic boot may fail.")
+            }
+        }
+
+        if (bootMode == BootMode.BUILTIN && !isX86) {
             val kernelPath = File(context.filesDir, "vmlinuz-virt")
             val initrdPath = File(context.filesDir, "initrd.img")
 
@@ -606,7 +605,7 @@ class QemuEngine @Inject constructor(
             }
         }
 
-        if (isIso && config.isoUri != null) {
+        if (bootMode == BootMode.ISO) {
             val destFile = File(context.filesDir, "boot.iso")
             if (destFile.exists()) {
                 args += "-cdrom"; args += destFile.absolutePath
@@ -617,28 +616,26 @@ class QemuEngine @Inject constructor(
 
         val storagePath = File(context.filesDir, "storage.img")
         if (storagePath.exists()) {
-            // Single dedicated iothread for the writable disk. Multi-iothread
-            // fan-out via `iothread-vq-mapping` requires `-device <full-json>`
-            // form (the keyval parser cannot supply array-typed properties),
-            // and on TCG-emulated guests the perf win is marginal vs the
-            // refactor cost. Stick with one iothread, num-queues==vCPUs.
+            // Single dedicated iothread for the primary writable disk.
             args += "-object"; args += "iothread,id=iothread0"
-            args += "-device"; args += "virtio-blk-pci,drive=drive1,num-queues=${config.cpus},iothread=iothread0"
+
+            val bootIndex = if (bootMode == BootMode.STORAGE) ",bootindex=1" else ""
+            args += "-device"; args += "virtio-blk-pci,drive=drive1,num-queues=${config.cpus},iothread=iothread0$bootIndex"
+
             // discard=unmap + detect-zeroes=unmap: as the guest fstrim's the
-            // overlay, hand the punched holes back to the host filesystem so
-            // storage.img stops growing unbounded after long-term container
-            // churn. detect-zeroes converts all-zero writes (e.g. mkfs.ext4's
-            // erasure pass) into discards too.
+            // overlay, hand the punched holes back to the host filesystem.
             args += "-drive";  args += "file=${storagePath.absolutePath},if=none,id=drive1,format=raw,cache=writeback,aio=threads,discard=unmap,detect-zeroes=unmap"
         }
 
-        val rootfsImg = File(context.filesDir, "alpine-rootfs.squashfs")
-        if (rootfsImg.exists()) {
-            // Dedicated iothread for the read-only squashfs so its decompression
-            // reads don't queue behind storage.img writes on iothread0.
-            args += "-object"; args += "iothread,id=iothread1"
-            args += "-device"; args += "virtio-blk-pci,drive=drive2,num-queues=${config.cpus},iothread=iothread1"
-            args += "-drive";  args += "file=${rootfsImg.absolutePath},if=none,id=drive2,format=raw,readonly=on,cache=writeback,aio=threads"
+        if (bootMode == BootMode.BUILTIN) {
+            val rootfsImg = File(context.filesDir, "alpine-rootfs.squashfs")
+            if (rootfsImg.exists()) {
+                // Dedicated iothread for the read-only squashfs so its decompression
+                // reads don't queue behind storage.img writes on iothread0.
+                args += "-object"; args += "iothread,id=iothread1"
+                args += "-device"; args += "virtio-blk-pci,drive=drive2,num-queues=${config.cpus},iothread=iothread1"
+                args += "-drive";  args += "file=${rootfsImg.absolutePath},if=none,id=drive2,format=raw,readonly=on,cache=writeback,aio=threads"
+            }
         }
 
         // Downloads folder sharing via virtio-9p
@@ -679,17 +676,14 @@ class QemuEngine @Inject constructor(
         }
 
         // ── Serial (ttyAMA0 / ttyS0) ──────────────────────────────────────────
-        // Generic ISOs typically use serial for their console. For ISO boots, map
-        // the serial port to terminal.sock (where the interactive bridge connects)
-        // so the terminal isn't empty.
-        val serialPath = if (isIso) terminalSockPath else serialSockPath
+        // Some images use serial for their console, others use virtio-console.
+        val isSerialPrimary = config.primaryConsole == ConsoleMode.SERIAL
+        val serialPath = if (isSerialPrimary) terminalSockPath else serialSockPath
         args += "-serial"; args += "unix:$serialPath,server,nowait"
 
         // ── virtio-console bus ────────────────────────────────────────────────
         // hvc0 = primary terminal (getty runs here; bridge connects to terminal.sock).
-        // For ISO boots, move hvc0 to serial.sock so the boot log monitor can still
-        // capture any early virtio output if the guest uses it.
-        val hvc0Path = if (isIso) serialSockPath else terminalSockPath
+        val hvc0Path = if (isSerialPrimary) serialSockPath else terminalSockPath
         args += "-device";  args += "virtio-serial-pci"
         args += "-chardev"; args += "socket,id=term0,path=$hvc0Path,server=on,wait=off"
         args += "-device";  args += "virtconsole,chardev=term0,name=org.podroid.term"
@@ -736,15 +730,15 @@ class QemuEngine @Inject constructor(
 
         if (storageFile.exists()) {
             if (storageFile.length() == desiredBytes) return
-            Log.d(TAG, "storage.img size mismatch — recreating")
-            storageFile.delete()
+            Log.d(TAG, "storage.img size mismatch — resizing instead of recreating to preserve data")
+            // Don't delete, just resize. Fallthrough will setLength.
         }
 
         try {
             java.io.RandomAccessFile(storageFile, "rw").use { it.setLength(desiredBytes) }
-            Log.d(TAG, "Created storage.img (${storageSizeGb}GB)")
+            Log.d(TAG, "Ensured storage.img (${storageSizeGb}GB)")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to create storage.img", e)
+            Log.e(TAG, "Failed to ensure storage.img", e)
         }
     }
 
