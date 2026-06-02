@@ -84,6 +84,7 @@ import com.excp.podroid.ui.components.PodroidChipColors
 import com.excp.podroid.ui.components.PodroidSectionLabel
 import com.excp.podroid.ui.components.PodroidSwitch
 import com.excp.podroid.ui.components.PodroidTopBar
+import com.excp.podroid.util.UriUtils
 import com.excp.podroid.ui.theme.PodroidTokens
 import com.excp.podroid.data.repository.LanguageManager
 
@@ -632,7 +633,11 @@ private fun BootModeSection(
         if (bootMode == com.excp.podroid.engine.BootMode.ISO) {
             PodroidListRow(
                 label = stringResource(R.string.pick_iso_label),
-                value = customUri.substringAfterLast("/").ifEmpty { stringResource(R.string.none) },
+                value = if (customUri.isEmpty()) {
+                    stringResource(R.string.none)
+                } else {
+                    UriUtils.getDisplayName(context, Uri.parse(customUri)) ?: stringResource(R.string.none)
+                },
                 onClick = {
                     launcher.launch(
                         arrayOf(
@@ -658,7 +663,11 @@ private fun BootModeSection(
 
             PodroidListRow(
                 label = stringResource(R.string.boot_mode_disk),
-                value = customUri.substringAfterLast("/").ifEmpty { stringResource(R.string.none) },
+                value = if (customUri.isEmpty()) {
+                    stringResource(R.string.none)
+                } else {
+                    UriUtils.getDisplayName(context, Uri.parse(customUri)) ?: stringResource(R.string.none)
+                },
                 onClick = {
                     importLauncher.launch(
                         arrayOf(

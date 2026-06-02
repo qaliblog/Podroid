@@ -67,6 +67,7 @@ import com.excp.podroid.ui.components.PodroidPrimaryButton
 import com.excp.podroid.ui.components.PodroidSectionLabel
 import com.excp.podroid.ui.components.PodroidSwitch
 import com.excp.podroid.ui.components.PodroidChipColors
+import com.excp.podroid.util.UriUtils
 import com.excp.podroid.ui.theme.PodroidTokens
 import kotlinx.coroutines.launch
 
@@ -436,7 +437,11 @@ private fun IsoSelectionPage(
             Spacer(Modifier.height(PodroidTokens.Spacing.LG))
             PodroidSectionLabel(stringResource(R.string.pick_iso_label))
             PodroidPrimaryButton(
-                text = if (selectedUri.isEmpty()) stringResource(R.string.pick_iso_label) else selectedUri.substringAfterLast("/"),
+                text = if (selectedUri.isEmpty()) {
+                    stringResource(R.string.pick_iso_label)
+                } else {
+                    UriUtils.getDisplayName(context, Uri.parse(selectedUri)) ?: stringResource(R.string.pick_iso_label)
+                },
                 onClick = {
                     launcher.launch(
                         arrayOf(

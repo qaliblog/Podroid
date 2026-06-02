@@ -614,7 +614,10 @@ class QemuEngine @Inject constructor(
         if (bootMode == BootMode.ISO) {
             val destFile = File(context.filesDir, "boot.iso")
             if (destFile.exists()) {
-                args += "-cdrom"; args += destFile.absolutePath
+                // Use explicit drive + device for the CD-ROM so we can set bootindex.
+                // Modern UEFI/BIOS machine types (q35/virt) handle virtio-blk well.
+                args += "-drive"; args += "file=${destFile.absolutePath},format=raw,if=none,id=drive-cd0,readonly=on"
+                args += "-device"; args += "virtio-blk-pci,drive=drive-cd0,bootindex=0"
             } else {
                 Log.e(TAG, "Localized ISO not found at ${destFile.absolutePath}")
             }
@@ -701,6 +704,7 @@ class QemuEngine @Inject constructor(
         args += "-device";  args += "virtconsole,chardev=host0,name=org.podroid.host"
 
         args += "-display"; args += "none"
+        args += "-boot";    args += "menu=on,strict=on"
         args += "-qmp";     args += "unix:$qmpSocketPath,server,nowait"
 
         // User extras appended last so later -cpu / -accel overrides earlier ones.
