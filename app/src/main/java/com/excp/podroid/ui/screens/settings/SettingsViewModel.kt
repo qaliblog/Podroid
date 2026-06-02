@@ -133,6 +133,21 @@ class SettingsViewModel @Inject constructor(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsUiState())
 
+    init {
+        // One-time migration: existing users on ISO/STORAGE mode might still have
+        // primaryConsole=VIRTIO (the old global default), which results in a blank
+        // terminal. Force them to SERIAL once.
+        viewModelScope.launch {
+            val mode = settingsRepository.getBootModeSnapshot()
+            val console = settingsRepository.getPrimaryConsoleSnapshot()
+            if (mode != com.excp.podroid.engine.BootMode.BUILTIN &&
+                console == com.excp.podroid.engine.ConsoleMode.VIRTIO) {
+                Log.i(TAG, "Migrating $mode user from VIRTIO to SERIAL console")
+                settingsRepository.setPrimaryConsole(com.excp.podroid.engine.ConsoleMode.SERIAL)
+            }
+        }
+    }
+
     fun setQemuExtraArgs(value: String) {
         viewModelScope.launch { settingsRepository.setQemuExtraArgs(value) }
     }
@@ -210,7 +225,17 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setBootMode(value: com.excp.podroid.engine.BootMode) {
-        viewModelScope.launch { settingsRepository.setBootMode(value) }
+        viewModelScope.launch {
+            settingsRepository.setBootMode(value)
+            // Auto-switch primary console to match common usage for the mode.
+            // Built-in Alpine uses virtio-console (hvc0); generic ISOs/images
+            // almost always use serial (ttyS0 / ttyAMA0).
+            val mode = when (value) {
+                com.excp.podroid.engine.BootMode.BUILTIN -> com.excp.podroid.engine.ConsoleMode.VIRTIO
+                else -> com.excp.podroid.engine.ConsoleMode.SERIAL
+            }
+            settingsRepository.setPrimaryConsole(mode)
+        }
     }
 
     fun setCustomImageUri(value: String) {
@@ -381,6 +406,7 @@ class SettingsViewModel @Inject constructor(
         val font = runCatching { settingsRepository.getTerminalFontSnapshot() }.getOrDefault("default")
         val qemuExtras = runCatching { settingsRepository.getQemuExtraArgsSnapshot() }.getOrDefault("")
         val kernelExtras = runCatching { settingsRepository.getKernelExtraCmdlineSnapshot() }.getOrDefault("")
+        val primaryConsole = runCatching { settingsRepository.getPrimaryConsoleSnapshot() }.getOrDefault(com.excp.podroid.engine.ConsoleMode.VIRTIO)
         val rules = runCatching { portForwardRepository.getRulesSnapshot() }.getOrDefault(emptyList())
 
         buildString {
@@ -413,6 +439,7 @@ class SettingsViewModel @Inject constructor(
             appendLine("Downloads sharing:  $storageAccess")
             appendLine("Terminal theme:     $theme")
             appendLine("Terminal font:      $font")
+            appendLine("Primary console:    $primaryConsole")
             appendLine("QEMU extra args:    $qemuExtras")
             appendLine("Kernel extra cmd:   $kernelExtras")
             appendLine()

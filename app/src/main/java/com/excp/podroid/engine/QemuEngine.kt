@@ -193,10 +193,16 @@ class QemuEngine @Inject constructor(
             val bridgeExe = File(context.applicationInfo.nativeLibraryDir, "libpodroid-bridge.so")
             if (!bridgeExe.exists()) return@post
 
+            // Skip initial CR for generic boots with menus (ISO/STORAGE)
+            val config = (settingsRepository as? com.excp.podroid.data.repository.SettingsRepository)?.let {
+                val mode = runBlocking { it.getBootModeSnapshot() }
+                if (mode != BootMode.BUILTIN) listOf("no-cr") else emptyList()
+            } ?: emptyList()
+
             val sess = TerminalSession(
                 bridgeExe.absolutePath,
                 context.filesDir.absolutePath,
-                arrayOf(bridgeExe.absolutePath, terminalSockPath, ctrlSockPath),
+                (listOf(bridgeExe.absolutePath, terminalSockPath, ctrlSockPath) + config).toTypedArray(),
                 null,
                 2000,
                 proxySessionClient,
@@ -223,10 +229,16 @@ class QemuEngine @Inject constructor(
             throw IllegalStateException("podroid-bridge not found at ${bridgeExe.absolutePath}")
         }
 
+        // Skip initial CR for generic boots with menus (ISO/STORAGE)
+        val bridgeArgs = (settingsRepository as? com.excp.podroid.data.repository.SettingsRepository)?.let {
+            val mode = runBlocking { it.getBootModeSnapshot() }
+            if (mode != BootMode.BUILTIN) listOf("no-cr") else emptyList()
+        } ?: emptyList()
+
         val sess = TerminalSession(
             bridgeExe.absolutePath,
             context.filesDir.absolutePath,
-            arrayOf(bridgeExe.absolutePath, terminalSockPath, ctrlSockPath),
+            (listOf(bridgeExe.absolutePath, terminalSockPath, ctrlSockPath) + bridgeArgs).toTypedArray(),
             null,
             2000,
             proxySessionClient,
@@ -571,11 +583,12 @@ class QemuEngine @Inject constructor(
         // UEFI firmware support for generic boots
         if (bootMode != BootMode.BUILTIN) {
             val firmwareName = if (isX86) "OVMF.fd" else "QEMU_EFI.fd"
+            // QEMU assets are extracted to the root of filesDir (see PodroidApplication.copyAssetDir)
             val firmwareFile = File(context.filesDir, firmwareName)
             if (firmwareFile.exists()) {
                 args += "-bios"; args += firmwareFile.absolutePath
             } else {
-                Log.w(TAG, "UEFI firmware $firmwareName not found, generic boot may fail.")
+                Log.w(TAG, "UEFI firmware $firmwareName not found at ${firmwareFile.absolutePath}, generic boot may fail.")
             }
         }
 
@@ -587,8 +600,13 @@ class QemuEngine @Inject constructor(
                 args += "-kernel"; args += kernelPath.absolutePath
                 val cmdline = buildString {
                     // mitigations=off: speculative-exec attacks don't cross the TCG ISA boundary; 5–15% gain.
-                    append("console=ttyAMA0 mitigations=off")
+                    // console=ttyXXX: kernel log always goes to the serial port (captured by QemuBootMonitor).
+                    // podroid.tty: tells our Alpine image which TTY to run the interactive getty on.
+                    val serialTty = if (isX86) "ttyS0" else "ttyAMA0"
+                    append("console=").append(serialTty).append(" mitigations=off")
                     if (userKernelExtras.isNotEmpty()) append(" ").append(userKernelExtras)
+                    val tty = if (config.primaryConsole == ConsoleMode.SERIAL) serialTty else "hvc0"
+                    append(" podroid.tty=").append(tty)
                     append(" androidip=").append(config.androidIp)
                     if (config.sshEnabled) append(" ssh=1")
                     append(" podroid.x11.dpi=").append(config.x11Dpi)
@@ -608,6 +626,9 @@ class QemuEngine @Inject constructor(
         if (bootMode == BootMode.ISO) {
             val destFile = File(context.filesDir, "boot.iso")
             if (destFile.exists()) {
+                // Revert to -cdrom shorthand for maximum compatibility. While
+                // virtio-blk is faster, many installer ISOs lack the drivers in
+                // their initrd to find the installation media on a virtio bus.
                 args += "-cdrom"; args += destFile.absolutePath
             } else {
                 Log.e(TAG, "Localized ISO not found at ${destFile.absolutePath}")
@@ -695,6 +716,7 @@ class QemuEngine @Inject constructor(
         args += "-device";  args += "virtconsole,chardev=host0,name=org.podroid.host"
 
         args += "-display"; args += "none"
+        args += "-boot";    args += "menu=on,strict=on"
         args += "-qmp";     args += "unix:$qmpSocketPath,server,nowait"
 
         // User extras appended last so later -cpu / -accel overrides earlier ones.
