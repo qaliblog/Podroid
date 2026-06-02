@@ -193,10 +193,16 @@ class QemuEngine @Inject constructor(
             val bridgeExe = File(context.applicationInfo.nativeLibraryDir, "libpodroid-bridge.so")
             if (!bridgeExe.exists()) return@post
 
+            // Skip initial CR for generic boots with menus (ISO/STORAGE)
+            val config = (settingsRepository as? com.excp.podroid.data.repository.SettingsRepository)?.let {
+                val mode = runBlocking { it.getBootModeSnapshot() }
+                if (mode != BootMode.BUILTIN) listOf("no-cr") else emptyList()
+            } ?: emptyList()
+
             val sess = TerminalSession(
                 bridgeExe.absolutePath,
                 context.filesDir.absolutePath,
-                arrayOf(bridgeExe.absolutePath, terminalSockPath, ctrlSockPath),
+                (listOf(bridgeExe.absolutePath, terminalSockPath, ctrlSockPath) + config).toTypedArray(),
                 null,
                 2000,
                 proxySessionClient,
@@ -223,10 +229,16 @@ class QemuEngine @Inject constructor(
             throw IllegalStateException("podroid-bridge not found at ${bridgeExe.absolutePath}")
         }
 
+        // Skip initial CR for generic boots with menus (ISO/STORAGE)
+        val bridgeArgs = (settingsRepository as? com.excp.podroid.data.repository.SettingsRepository)?.let {
+            val mode = runBlocking { it.getBootModeSnapshot() }
+            if (mode != BootMode.BUILTIN) listOf("no-cr") else emptyList()
+        } ?: emptyList()
+
         val sess = TerminalSession(
             bridgeExe.absolutePath,
             context.filesDir.absolutePath,
-            arrayOf(bridgeExe.absolutePath, terminalSockPath, ctrlSockPath),
+            (listOf(bridgeExe.absolutePath, terminalSockPath, ctrlSockPath) + bridgeArgs).toTypedArray(),
             null,
             2000,
             proxySessionClient,
@@ -614,10 +626,10 @@ class QemuEngine @Inject constructor(
         if (bootMode == BootMode.ISO) {
             val destFile = File(context.filesDir, "boot.iso")
             if (destFile.exists()) {
-                // Use explicit drive + device for the CD-ROM so we can set bootindex.
-                // Modern UEFI/BIOS machine types (q35/virt) handle virtio-blk well.
-                args += "-drive"; args += "file=${destFile.absolutePath},format=raw,if=none,id=drive-cd0,readonly=on"
-                args += "-device"; args += "virtio-blk-pci,drive=drive-cd0,bootindex=0"
+                // Revert to -cdrom shorthand for maximum compatibility. While
+                // virtio-blk is faster, many installer ISOs lack the drivers in
+                // their initrd to find the installation media on a virtio bus.
+                args += "-cdrom"; args += destFile.absolutePath
             } else {
                 Log.e(TAG, "Localized ISO not found at ${destFile.absolutePath}")
             }
