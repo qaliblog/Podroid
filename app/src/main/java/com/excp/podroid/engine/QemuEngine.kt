@@ -588,13 +588,12 @@ class QemuEngine @Inject constructor(
                 args += "-kernel"; args += kernelPath.absolutePath
                 val cmdline = buildString {
                     // mitigations=off: speculative-exec attacks don't cross the TCG ISA boundary; 5–15% gain.
-                    // console=ttyAMA0: kernel log always goes to the serial port (captured by QemuBootMonitor).
+                    // console=ttyXXX: kernel log always goes to the serial port (captured by QemuBootMonitor).
                     // podroid.tty: tells our Alpine image which TTY to run the interactive getty on.
-                    append("console=ttyAMA0 mitigations=off")
+                    val serialTty = if (isX86) "ttyS0" else "ttyAMA0"
+                    append("console=").append(serialTty).append(" mitigations=off")
                     if (userKernelExtras.isNotEmpty()) append(" ").append(userKernelExtras)
-                    val tty = if (config.primaryConsole == ConsoleMode.SERIAL) {
-                        if (isX86) "ttyS0" else "ttyAMA0"
-                    } else "hvc0"
+                    val tty = if (config.primaryConsole == ConsoleMode.SERIAL) serialTty else "hvc0"
                     append(" podroid.tty=").append(tty)
                     append(" androidip=").append(config.androidIp)
                     if (config.sshEnabled) append(" ssh=1")
